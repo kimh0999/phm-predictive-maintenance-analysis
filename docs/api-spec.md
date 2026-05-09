@@ -7,8 +7,21 @@ GET /api/equipments
 GET /api/equipments/{equipmentCode}/latest
 GET /api/equipments/{equipmentCode}/analysis-results
 GET /api/alarms
+GET /api/alarms/{alarmId}/focus-analysis
+GET /api/alarms/{alarmId}/focus-analysis/selection
 GET /api/dashboard/summary
 ```
+
+Alarm rows are event based. A row opens when an equipment changes from `normal` to `warning`/`danger`, then closes when the equipment returns to `normal`. `durationSeconds` records the interval between `occurredAt` and `endedAt`.
+
+Alarm focus analysis is loaded on demand and does not create extra database rows.
+
+```text
+GET /api/alarms/{alarmId}/focus-analysis?paddingSeconds=10&maxPoints=40000
+GET /api/alarms/{alarmId}/focus-analysis/selection?startMillis=...&endMillis=...&maxSamples=64000
+```
+
+The first endpoint reads stored raw window JSON files and existing analysis rows around the alarm interval. The second endpoint analyzes only the user-selected interval and returns FFT/features/AI output without saving the result.
 
 Raw vibration chart endpoint:
 

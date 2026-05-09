@@ -56,8 +56,12 @@ alarm_history
 - equipment_code
 - analysis_result_id
 - alarm_level
+- status
 - message
 - occurred_at
+- ended_at
+- duration_seconds
+- updated_at
 ```
 
 ## Storage Rule

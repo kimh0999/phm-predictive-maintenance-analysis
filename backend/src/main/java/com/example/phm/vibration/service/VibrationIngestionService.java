@@ -2,6 +2,7 @@ package com.example.phm.vibration.service;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
@@ -133,17 +134,49 @@ public class VibrationIngestionService {
     }
 
     private boolean saveAlarmIfNeeded(AnalysisResult analysisResult, AnalyzeResponse analysis) {
-        if (!isAlarmLevel(analysis.getAlarmLevel())) {
-            return false;
+        if (isAlarmLevel(analysis.getAlarmLevel())) {
+            return openOrUpdateAlarm(analysisResult, analysis);
         }
 
-        AlarmHistory alarm = new AlarmHistory();
-        alarm.setEquipmentCode(analysisResult.getEquipmentCode());
-        alarm.setAnalysisResult(analysisResult);
-        alarm.setAlarmLevel(analysis.getAlarmLevel());
-        alarm.setMessage(buildAlarmMessage(analysisResult, analysis));
-        alarmHistoryRepository.save(alarm);
-        return true;
+        closeOpenAlarmIfNeeded(analysisResult);
+        return false;
+    }
+
+    private boolean openOrUpdateAlarm(AnalysisResult analysisResult, AnalyzeResponse analysis) {
+        return alarmHistoryRepository
+                .findTopByEquipmentCodeAndStatusOrderByOccurredAtDesc(analysisResult.getEquipmentCode(), "open")
+                .map(alarm -> {
+                    alarm.setAlarmLevel(worseAlarmLevel(alarm.getAlarmLevel(), analysis.getAlarmLevel()));
+                    alarm.setAnalysisResult(analysisResult);
+                    alarm.setMessage(buildAlarmMessage(analysisResult, analysis, alarm.getOccurredAt(), null));
+                    alarmHistoryRepository.save(alarm);
+                    return false;
+                })
+                .orElseGet(() -> {
+                    AlarmHistory alarm = new AlarmHistory();
+                    alarm.setEquipmentCode(analysisResult.getEquipmentCode());
+                    alarm.setAnalysisResult(analysisResult);
+                    alarm.setAlarmLevel(analysis.getAlarmLevel());
+                    alarm.setStatus("open");
+                    alarm.setOccurredAt(analysisResult.getVibrationWindow().getMeasuredAt());
+                    alarm.setMessage(buildAlarmMessage(analysisResult, analysis, alarm.getOccurredAt(), null));
+                    alarmHistoryRepository.save(alarm);
+                    return true;
+                });
+    }
+
+    private void closeOpenAlarmIfNeeded(AnalysisResult analysisResult) {
+        alarmHistoryRepository
+                .findTopByEquipmentCodeAndStatusOrderByOccurredAtDesc(analysisResult.getEquipmentCode(), "open")
+                .ifPresent(alarm -> {
+                    LocalDateTime endedAt = analysisResult.getVibrationWindow().getMeasuredAt();
+                    long durationSeconds = Math.max(0L, Duration.between(alarm.getOccurredAt(), endedAt).getSeconds());
+                    alarm.setStatus("closed");
+                    alarm.setEndedAt(endedAt);
+                    alarm.setDurationSeconds(durationSeconds);
+                    alarm.setMessage(buildAlarmClosedMessage(alarm, durationSeconds));
+                    alarmHistoryRepository.save(alarm);
+                });
     }
 
     private boolean isAlarmLevel(String alarmLevel) {
@@ -154,14 +187,33 @@ public class VibrationIngestionService {
         return normalized.equals("warning") || normalized.equals("danger");
     }
 
-    private String buildAlarmMessage(AnalysisResult analysisResult, AnalyzeResponse analysis) {
-        return "Vibration anomaly detected: equipmentCode=%s, alarmLevel=%s, anomalyScore=%s, prediction=%s"
+    private String worseAlarmLevel(String currentLevel, String nextLevel) {
+        if ("danger".equalsIgnoreCase(currentLevel) || "danger".equalsIgnoreCase(nextLevel)) {
+            return "danger";
+        }
+        return "warning";
+    }
+
+    private String buildAlarmMessage(
+            AnalysisResult analysisResult,
+            AnalyzeResponse analysis,
+            LocalDateTime startedAt,
+            LocalDateTime endedAt
+    ) {
+        return "Vibration anomaly active: equipmentCode=%s, alarmLevel=%s, anomalyScore=%s, prediction=%s, startedAt=%s, endedAt=%s"
                 .formatted(
                         analysisResult.getEquipmentCode(),
                         analysis.getAlarmLevel(),
                         analysis.getAnomalyScore(),
-                        analysis.getPrediction()
+                        analysis.getPrediction(),
+                        startedAt,
+                        endedAt
                 );
+    }
+
+    private String buildAlarmClosedMessage(AlarmHistory alarm, long durationSeconds) {
+        return "Vibration anomaly closed: equipmentCode=%s, peakAlarmLevel=%s, durationSeconds=%d"
+                .formatted(alarm.getEquipmentCode(), alarm.getAlarmLevel(), durationSeconds);
     }
 
     private LocalDateTime parseMeasuredAt(String timestamp) {

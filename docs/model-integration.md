@@ -108,10 +108,27 @@ y.shape = (n_windows,)
 y class = normal | bearing | looseness | misalignment | unbalance
 ```
 
+현재 `bearing`은 볼 결함, 내륜 결함, 외륜 결함을 하나로 합친 통합 라벨입니다. 따라서 이 모델은 `bearing`이라고 말할 수는 있지만, 그 안에서 `ball`, `inner_race`, `outer_race` 중 무엇인지는 구분할 수 없습니다.
+
+세부 베어링 결함까지 화면에 표시하려면 다음 학습부터는 아래처럼 세부 라벨 모델로 학습하는 것을 권장합니다.
+
+```text
+y class = normal | ball | inner_race | outer_race | looseness | misalignment | unbalance
+```
+
+서비스 프론트엔드는 이미 `ball`, `B`, `inner_race`, `IR`, `outer_race`, `OR` 라벨을 한글 표시명으로 변환할 수 있습니다. 즉 모델만 세부 라벨을 출력하면 기존 API/DB의 `prediction` 문자열을 통해 바로 표시할 수 있습니다.
+
 모델의 1차 출력은 분류 결과입니다.
 
 ```text
 prediction: normal | bearing | looseness | misalignment | unbalance
+confidence: 0.0 ~ 1.0
+```
+
+세부 라벨 모델로 교체한 뒤에는 `prediction` 범위를 다음처럼 보면 됩니다.
+
+```text
+prediction: normal | ball | inner_race | outer_race | looseness | misalignment | unbalance
 confidence: 0.0 ~ 1.0
 ```
 

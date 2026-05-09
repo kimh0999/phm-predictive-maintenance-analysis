@@ -31,11 +31,23 @@ public class AlarmHistory {
     @Column(name = "alarm_level", nullable = false, length = 20)
     private String alarmLevel;
 
+    @Column(name = "status", nullable = false, length = 20)
+    private String status;
+
     @Column(name = "message", nullable = false, length = 255)
     private String message;
 
-    @Column(name = "occurred_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    @Column(name = "ended_at")
+    private LocalDateTime endedAt;
+
+    @Column(name = "duration_seconds")
+    private Long durationSeconds;
+
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    private LocalDateTime updatedAt;
 
     public Long getId() {
         return id;
@@ -65,6 +77,14 @@ public class AlarmHistory {
         this.alarmLevel = alarmLevel;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public String getMessage() {
         return message;
     }
@@ -75,5 +95,29 @@ public class AlarmHistory {
 
     public LocalDateTime getOccurredAt() {
         return occurredAt;
+    }
+
+    public void setOccurredAt(LocalDateTime occurredAt) {
+        this.occurredAt = occurredAt;
+    }
+
+    public LocalDateTime getEndedAt() {
+        return endedAt;
+    }
+
+    public void setEndedAt(LocalDateTime endedAt) {
+        this.endedAt = endedAt;
+    }
+
+    public Long getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Long durationSeconds) {
+        this.durationSeconds = durationSeconds;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }

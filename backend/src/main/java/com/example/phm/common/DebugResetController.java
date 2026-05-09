@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/debug")
-@Profile("local")
+@Profile({"local", "docker"})
 public class DebugResetController {
 
     private final DebugResetService debugResetService;

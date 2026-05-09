@@ -99,3 +99,31 @@ node-red/vibration-jsonl-replay-flow.json
 ```
 
 자세한 1차 재생 절차는 `docs/phase1-data-replay.md`를 확인합니다.
+
+## Docker Compose
+
+전체 서비스를 Docker로 한 번에 실행할 수 있습니다.
+
+```bash
+docker compose up --build
+```
+
+DB volume까지 초기화해서 새 스키마로 다시 시작하려면:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+접속 주소:
+
+```text
+Vue dashboard: http://localhost:5173
+Spring Boot:   http://localhost:8080
+FastAPI docs:  http://localhost:8001/docs
+Node-RED:      http://localhost:1880
+MySQL:         localhost:3306
+Mosquitto:     localhost:1883
+```
+
+Docker 실행 기준에서 Node-RED flow는 `/project-data/jsonl` 경로와 `mosquitto`, `backend` service name을 사용합니다.

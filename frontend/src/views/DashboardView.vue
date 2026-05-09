@@ -32,7 +32,7 @@
         <div class="toolbar">
           <select v-model="selectedEquipment" class="easy-select" @change="loadDashboard">
             <option v-for="equipment in equipments" :key="equipment.equipmentCode" :value="equipment.equipmentCode">
-              {{ equipment.equipmentCode }} · {{ equipment.equipmentName }}
+              {{ equipment.equipmentCode }} · {{ displayEquipmentName(equipment) }}
             </option>
           </select>
           <select v-model="language" class="easy-select lang-select">
@@ -100,7 +100,7 @@
         <article class="system-card">
           <span class="system-label">{{ t('latestEquipment') }}</span>
           <strong>{{ selectedEquipment || '-' }}</strong>
-          <small>{{ latestRaw.rpm || '-' }} RPM · {{ latestRaw.samplingRate || '-' }} Hz</small>
+          <small>{{ selectedEquipmentName }} · {{ latestRaw.rpm || '-' }} RPM · {{ latestRaw.samplingRate || '-' }} Hz</small>
         </article>
         <article class="system-card">
           <span class="system-label">{{ t('serverStatus') }}</span>
@@ -137,60 +137,86 @@
       </section>
 
       <section v-show="isSegmentVisible('fft')" class="metric-workspace">
-        <div class="model-result-strip">
-          <article class="model-result-card">
-            <span>{{ t('aiPrediction') }}</span>
-            <strong>{{ latestAnalysis.prediction || '-' }}</strong>
-            <small>{{ t('modelVersion') }} {{ latestAnalysis.modelVersion || '-' }}</small>
-          </article>
-          <article class="model-result-card">
-            <span>{{ t('modelStatus') }}</span>
-            <strong>{{ tModelStatus(latestAnalysis.modelStatus) }}</strong>
-            <small>{{ t('modelInputType') }} {{ latestAnalysis.modelInputType || '-' }}</small>
-          </article>
-          <article class="model-result-card">
-            <span>{{ t('confidence') }}</span>
-            <strong>{{ formatPercent(latestAnalysis.confidence) }}</strong>
-            <small>{{ t('modelExpectedInput') }} {{ latestAnalysis.modelExpectedInputSize || '-' }}</small>
-          </article>
-          <article class="model-result-card">
-            <span>{{ t('alarmDecision') }}</span>
-            <strong :class="['alarm-text', latestAnalysis.alarmLevel || 'normal']">{{ tLevel(latestAnalysis.alarmLevel) }}</strong>
-            <small>{{ latestAnalysis.modelInputStrategy || t('modelConfidenceHelp') }}</small>
-          </article>
-        </div>
-        <div class="kpi-grid">
-          <article
-            v-for="metric in metricCards"
-            :key="metric.key"
-            :class="['metric-card', selectedMetricKey === metric.key ? 'selected' : '']"
-            role="button"
-            tabindex="0"
-            :aria-label="`${metric.label} ${t('detailAnalysis')}`"
-            @click="selectMetric(metric.key)"
-            @keydown.enter.prevent="selectMetric(metric.key)"
-            @keydown.space.prevent="selectMetric(metric.key)"
-          >
-            <span
-              class="metric-hit-area"
-              aria-hidden="true"
-              @click.stop="selectMetric(metric.key)"
-              @mouseenter="showMetricTooltip(metric.key, $event)"
-              @mousemove="moveMetricTooltip($event)"
-              @mouseleave="hideMetricTooltip"
-            ></span>
-            <div class="metric-rank">{{ metric.rank }}</div>
-            <span class="metric-open-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M8 5l8 7-8 7z"></path>
-              </svg>
-            </span>
-            <div class="metric-title">{{ metric.label }}</div>
-            <div class="metric-value">{{ metric.value }}</div>
-            <div class="mini-chart">
-              <EChartPanel :option="metric.option" />
+        <div class="fft-analysis-grid">
+          <div class="fft-metric-column">
+            <div class="kpi-grid">
+              <article
+                v-for="metric in metricCards"
+                :key="metric.key"
+                :class="['metric-card', selectedMetricKey === metric.key ? 'selected' : '']"
+                role="button"
+                tabindex="0"
+                :aria-label="`${metric.label} ${t('detailAnalysis')}`"
+                @click="selectMetric(metric.key)"
+                @keydown.enter.prevent="selectMetric(metric.key)"
+                @keydown.space.prevent="selectMetric(metric.key)"
+              >
+                <span
+                  class="metric-hit-area"
+                  aria-hidden="true"
+                  @click.stop="selectMetric(metric.key)"
+                  @mouseenter="showMetricTooltip(metric.key, $event)"
+                  @mousemove="moveMetricTooltip($event)"
+                  @mouseleave="hideMetricTooltip"
+                ></span>
+                <div class="metric-rank">{{ metric.rank }}</div>
+                <span class="metric-open-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M8 5l8 7-8 7z"></path>
+                  </svg>
+                </span>
+                <div class="metric-title">{{ metric.label }}</div>
+                <div class="metric-value">{{ metric.value }}</div>
+                <div class="mini-chart">
+                  <EChartPanel :option="metric.option" />
+                </div>
+              </article>
             </div>
-          </article>
+          </div>
+
+          <aside class="monitor-panel ai-analysis-panel">
+            <header class="panel-heading">
+              <div>
+                <span>{{ t('aiAnalysis') }}</span>
+                <strong>{{ formatPrediction(latestAnalysis.prediction) }}</strong>
+              </div>
+              <em>{{ t('modelStatus') }} · {{ tModelStatus(latestAnalysis.modelStatus) }}</em>
+            </header>
+
+            <div class="confidence-gauge">
+              <EChartPanel :option="confidenceGaugeOption" />
+            </div>
+
+            <div class="ai-fact-grid">
+              <div>
+                <span>{{ t('rawPrediction') }}</span>
+                <strong>{{ latestAnalysis.prediction || '-' }}</strong>
+              </div>
+              <div>
+                <span>{{ t('alarmDecision') }}</span>
+                <strong :class="['alarm-text', latestAnalysis.alarmLevel || 'normal']">{{ tLevel(latestAnalysis.alarmLevel) }}</strong>
+              </div>
+              <div>
+                <span>{{ t('modelVersion') }}</span>
+                <strong>{{ latestAnalysis.modelVersion || '-' }}</strong>
+              </div>
+              <div>
+                <span>{{ t('modelInputType') }}</span>
+                <strong>{{ latestAnalysis.modelInputType || '-' }}</strong>
+              </div>
+              <div>
+                <span>{{ t('modelExpectedInput') }}</span>
+                <strong>{{ latestAnalysis.modelExpectedInputSize || '-' }}</strong>
+              </div>
+              <div>
+                <span>{{ t('inputStrategy') }}</span>
+                <strong>{{ latestAnalysis.modelInputStrategy || '-' }}</strong>
+              </div>
+            </div>
+
+            <p v-if="predictionNote" class="ai-model-note">{{ predictionNote }}</p>
+            <p class="ai-model-note muted">{{ t('modelConfidenceHelp') }}</p>
+          </aside>
         </div>
       </section>
 
@@ -235,7 +261,7 @@
                 @click="selectEquipment(row.equipmentCode)"
               >
                 <span class="equipment-code">{{ row.equipmentCode }}</span>
-                <span class="equipment-name">{{ row.equipmentName }}</span>
+                <span class="equipment-name">{{ row.displayName }}</span>
                 <span :class="['level-badge', row.alarmLevel]">{{ tLevel(row.alarmLevel) }}</span>
                 <span class="equipment-reading">{{ t('rms') }} {{ formatNumber(row.rms, 4) }}</span>
                 <span class="equipment-reading">{{ t('anomalyScore') }} {{ formatNumber(row.anomalyScore, 3) }}</span>
@@ -292,12 +318,19 @@
               {{ t('noAlarm') }}
             </div>
             <div v-else class="alarm-feed-list">
-              <div v-for="alarm in recentAlarmItems" :key="alarm.id" class="alarm-feed-item">
+              <button
+                v-for="alarm in recentAlarmItems"
+                :key="alarm.id"
+                class="alarm-feed-item"
+                type="button"
+                :title="t('clickAlarmForFocus')"
+                @click="openFocusAnalysis(alarm)"
+              >
                 <span :class="['level-badge', alarm.rawLevel]">{{ alarm.alarmLevel }}</span>
                 <strong>{{ alarm.equipmentCode }}</strong>
                 <span>{{ alarm.displayMessage }}</span>
                 <time>{{ alarm.occurredAt }}</time>
-              </div>
+              </button>
             </div>
           </article>
         </div>
@@ -356,20 +389,55 @@
               <thead>
                 <tr>
                   <th>{{ t('occurredAt') }}</th>
+                  <th>{{ t('endedAt') }}</th>
+                  <th>{{ t('duration') }}</th>
                   <th>{{ t('equipment') }}</th>
                   <th>{{ t('level') }}</th>
+                  <th>{{ t('status') }}</th>
                   <th>{{ t('evidence') }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="alarm in actualAlarmRows" :key="alarm.id">
+                <tr
+                  v-for="alarm in actualAlarmRows"
+                  :key="alarm.id"
+                  class="clickable-row"
+                  :title="t('clickAlarmForFocus')"
+                  @click="openFocusAnalysis(alarm)"
+                >
                   <td>{{ alarm.occurredAt }}</td>
+                  <td>{{ alarm.endedAt }}</td>
+                  <td>{{ alarm.duration }}</td>
                   <td>{{ alarm.equipmentCode }}</td>
                   <td><span :class="['level-badge', alarm.rawLevel]">{{ alarm.alarmLevel }}</span></td>
+                  <td><span :class="['status-badge', alarm.rawStatus]">{{ alarm.status }}</span></td>
                   <td>{{ alarm.displayMessage }}</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </article>
+      </section>
+
+      <section v-show="isSegmentVisible('focus')" class="focus-workspace">
+        <article class="monitor-panel focus-empty-panel">
+          <header class="panel-heading">
+            <div>
+              <span>{{ t('focusAnalysis') }}</span>
+              <strong>{{ focusAnalysis ? `${focusAnalysis.equipmentCode} #${focusAnalysis.alarmId}` : t('focusEmptyTitle') }}</strong>
+            </div>
+            <em>{{ focusAnalysis ? t('openFocusModal') : t('alarmTab') }}</em>
+          </header>
+          <div class="focus-empty-content">
+            <p>{{ focusAnalysis ? formatFocusRange(focusAnalysis) : t('focusEmptyHelp') }}</p>
+            <button
+              v-if="focusAnalysis"
+              class="focus-open-button"
+              type="button"
+              @click="showFocusModal = true"
+            >
+              {{ t('openFocusModal') }}
+            </button>
           </div>
         </article>
       </section>
@@ -421,6 +489,110 @@
           <EChartPanel :option="metricDetailOption" />
         </section>
       </div>
+
+      <div v-if="showFocusModal" class="focus-modal-backdrop" @click.self="closeFocusModal">
+        <section class="focus-modal-panel" role="dialog" aria-modal="true" :aria-label="t('focusAnalysis')">
+          <header class="metric-expanded-header">
+            <div>
+              <span class="metric-expanded-kicker">{{ t('focusAnalysis') }}</span>
+              <h2>{{ focusModalTitle }}</h2>
+              <p>{{ focusAnalysis ? formatFocusRange(focusAnalysis) : t('loading') }}</p>
+            </div>
+            <button class="icon-action metric-close-button" type="button" :title="t('close')" :aria-label="t('close')" @click="closeFocusModal">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12"></path>
+                <path d="M18 6L6 18"></path>
+              </svg>
+            </button>
+          </header>
+
+          <div v-if="focusLoading" class="focus-loading">{{ t('loading') }}...</div>
+          <div v-else-if="focusAnalysis" class="focus-modal-body">
+            <div class="focus-main-grid">
+              <article class="monitor-panel focus-raw-panel">
+                <header class="panel-heading">
+                  <div>
+                    <span>{{ t('focusRange') }}</span>
+                    <strong>{{ t('focusRawTitle') }}</strong>
+                  </div>
+                  <em>{{ focusAnalysis.sampleCount }}/{{ focusAnalysis.originalSampleCount }} {{ t('samples') }}</em>
+                </header>
+                <EChartPanel :option="focusRawOption" @datazoom="handleFocusRawZoom" />
+              </article>
+
+              <aside class="monitor-panel focus-side-panel">
+                <header class="panel-heading">
+                  <div>
+                    <span>{{ t('selectedRange') }}</span>
+                    <strong>{{ focusSelectionRangeText }}</strong>
+                  </div>
+                  <em>{{ focusSelectionLoading ? t('loading') : t('exactRange') }}</em>
+                </header>
+
+                <div v-if="focusSelection" class="focus-selection-grid">
+                  <div>
+                    <span>{{ t('rms') }}</span>
+                    <strong>{{ formatNumber(focusSelection.features?.rms, 5) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('peakToPeak') }}</span>
+                    <strong>{{ formatNumber(focusSelection.features?.peakToPeak, 5) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('crestFactor') }}</span>
+                    <strong>{{ formatNumber(focusSelection.features?.crestFactor, 3) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('kurtosis') }}</span>
+                    <strong>{{ formatNumber(focusSelection.features?.kurtosis, 3) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('aiPrediction') }}</span>
+                    <strong>{{ formatPrediction(focusSelection.prediction) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('confidence') }}</span>
+                    <strong>{{ formatPercent(focusSelection.confidence) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('samplesAnalyzed') }}</span>
+                    <strong>{{ focusSelection.sampleCount }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t('originalSamples') }}</span>
+                    <strong>{{ focusSelection.originalSampleCount }}</strong>
+                  </div>
+                </div>
+                <p v-else class="focus-help-text">{{ t('noSelection') }}</p>
+              </aside>
+            </div>
+
+            <div class="focus-chart-grid">
+              <article class="monitor-panel focus-fft-panel">
+                <header class="panel-heading">
+                  <div>
+                    <span>{{ t('selectedRange') }}</span>
+                    <strong>{{ t('selectedFft') }}</strong>
+                  </div>
+                  <em>{{ focusSelection?.downsampled ? t('downsampled') : '-' }}</em>
+                </header>
+                <EChartPanel :option="focusFftOption" />
+              </article>
+
+              <article class="monitor-panel focus-trend-panel">
+                <header class="panel-heading">
+                  <div>
+                    <span>{{ focusAnalysis.equipmentCode }}</span>
+                    <strong>{{ t('focusTrendTitle') }}</strong>
+                  </div>
+                  <em>{{ focusAnalysis.analysisTrend.length }} {{ t('windowUnit') }}</em>
+                </header>
+                <EChartPanel :option="focusFeatureTrendOption" />
+              </article>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 </template>
@@ -428,6 +600,8 @@
 <script>
 import EChartPanel from '../components/EChartPanel.vue';
 import {
+  fetchAlarmFocusAnalysis,
+  fetchAlarmFocusSelection,
   fetchAlarms,
   fetchAnalysisResults,
   fetchDashboardSummary,
@@ -456,14 +630,17 @@ const messages = {
     vibration: '진동 신호',
     fft: 'FFT 분석',
     alarms: '알람 이력',
+    focusAnalysis: '집중 분석',
     overview: '개요',
     raw: '원본 신호',
     fftFeatures: 'FFT 특징',
     alarmTab: '알람',
+    focusTab: '집중 분석',
     overviewTitle: '진동 모니터링 개요',
     rawTitle: '원본 진동 시계열',
     fftTitle: 'FFT 특징 분석',
     alarmsTitle: '알람 이력',
+    focusTitle: '알림 집중 분석',
     autoOn: '자동 갱신 ON',
     autoOff: '자동 갱신 OFF',
     refreshing: '갱신 중',
@@ -480,18 +657,37 @@ const messages = {
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: '이상 점수',
-    aiPrediction: 'AI 예측',
+    aiPrediction: 'AI 예측 후보',
+    aiAnalysis: 'AI 분석',
     confidence: '신뢰도',
+    confidenceGauge: '신뢰도 게이지',
     modelVersion: '모델',
     modelStatus: '모델 상태',
     modelInputType: '입력',
     modelExpectedInput: '기대 입력',
+    inputStrategy: '입력 전략',
+    rawPrediction: '원본 예측값',
     modelLoaded: '로드됨',
     modelMissing: '모델 없음',
     modelError: '오류',
     modelUnavailable: '미사용',
+    predictionBearing: '베어링 결함(통합 라벨)',
+    predictionBall: '베어링 볼 손상',
+    predictionInnerRace: '베어링 내륜 손상',
+    predictionOuterRace: '베어링 외륜 손상',
+    predictionLooseness: '헐거움',
+    predictionMisalignment: '정렬불량',
+    predictionUnbalance: '불균형',
+    predictionNormal: '정상',
+    predictionUnknown: '미확인',
+    broadBearingNote: '현재 모델은 볼/내륜/외륜을 구분하지 않고 bearing으로 통합 예측합니다.',
+    aiReferenceNote: '알람 판정은 특징값 기반 이상 점수와 별도로 계산됩니다.',
     alarmDecision: '알람 판정',
     modelConfidenceHelp: '모델 predict_proba 기준',
+    gradeA: '높음',
+    gradeB: '양호',
+    gradeC: '보통',
+    gradeD: '낮음',
     peakToPeak: 'Peak-to-Peak',
     crestFactor: 'Crest Factor',
     kurtosis: 'Kurtosis',
@@ -515,6 +711,11 @@ const messages = {
     windowUnit: 'window',
     rowsUnit: 'rows',
     occurredAt: '발생 시각',
+    endedAt: '종료 시각',
+    duration: '지속 시간',
+    status: '상태',
+    open: '진행 중',
+    closed: '종료',
     equipment: '설비',
     level: '단계',
     message: '메시지',
@@ -540,6 +741,23 @@ const messages = {
     metricDetailHelp: '카드를 선택하면 해당 지표를 확대 분석합니다.',
     expandedHint: '마우스 휠/드래그로 구간을 확대하고, 우측 도구로 복원하거나 이미지로 저장할 수 있습니다.',
     close: '닫기'
+    ,
+    focusEmptyTitle: '분석할 알림을 선택하세요',
+    focusEmptyHelp: '알람 이력에서 특정 알림 행을 클릭하면 발생 전후 10초 구간을 불러와 집중 분석 팝업을 엽니다.',
+    openFocusModal: '집중 분석 열기',
+    focusRange: '분석 구간',
+    selectedRange: '선택 구간',
+    selectedFft: '선택 구간 FFT',
+    focusRawTitle: '알림 전후 원본 진동',
+    focusTrendTitle: '구간 특징값 흐름',
+    focusAiResult: '선택 구간 AI 분석',
+    loading: '불러오는 중',
+    noSelection: '원본 진동 차트에서 구간을 드래그하거나 하단 줌 바를 조절하면 선택 구간 FFT와 특징값을 계산합니다.',
+    clickAlarmForFocus: '행을 클릭하면 집중 분석',
+    samplesAnalyzed: '분석 샘플',
+    originalSamples: '원본 샘플',
+    downsampled: '다운샘플됨',
+    exactRange: '선택 구간 기준'
   },
   en: {
     brand: 'PHM Monitor',
@@ -552,14 +770,17 @@ const messages = {
     vibration: 'Vibration',
     fft: 'FFT Analysis',
     alarms: 'Alarm History',
+    focusAnalysis: 'Focus Analysis',
     overview: 'Overview',
     raw: 'Raw Signal',
     fftFeatures: 'FFT Features',
     alarmTab: 'Alarms',
+    focusTab: 'Focus',
     overviewTitle: 'Vibration Monitoring Overview',
     rawTitle: 'Raw Signal Replay',
     fftTitle: 'FFT Feature Analysis',
     alarmsTitle: 'Alarm History',
+    focusTitle: 'Alarm Focus Analysis',
     autoOn: 'Auto Refresh ON',
     autoOff: 'Auto Refresh OFF',
     refreshing: 'Refreshing',
@@ -576,18 +797,37 @@ const messages = {
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: 'Anomaly Score',
-    aiPrediction: 'AI Prediction',
+    aiPrediction: 'AI Prediction Candidate',
+    aiAnalysis: 'AI Analysis',
     confidence: 'Confidence',
+    confidenceGauge: 'Confidence Gauge',
     modelVersion: 'Model',
     modelStatus: 'Model Status',
     modelInputType: 'Input',
     modelExpectedInput: 'Expected Input',
+    inputStrategy: 'Input Strategy',
+    rawPrediction: 'Raw Prediction',
     modelLoaded: 'Loaded',
     modelMissing: 'Missing',
     modelError: 'Error',
     modelUnavailable: 'Unavailable',
+    predictionBearing: 'Bearing Fault (Grouped Label)',
+    predictionBall: 'Bearing Ball Fault',
+    predictionInnerRace: 'Bearing Inner Race Fault',
+    predictionOuterRace: 'Bearing Outer Race Fault',
+    predictionLooseness: 'Looseness',
+    predictionMisalignment: 'Misalignment',
+    predictionUnbalance: 'Unbalance',
+    predictionNormal: 'Normal',
+    predictionUnknown: 'Unknown',
+    broadBearingNote: 'This model groups ball, inner race, and outer race faults into bearing.',
+    aiReferenceNote: 'Alarm decision is calculated separately from feature-based anomaly score.',
     alarmDecision: 'Alarm Decision',
     modelConfidenceHelp: 'Based on model predict_proba',
+    gradeA: 'High',
+    gradeB: 'Good',
+    gradeC: 'Moderate',
+    gradeD: 'Low',
     peakToPeak: 'Peak-to-Peak',
     crestFactor: 'Crest Factor',
     kurtosis: 'Kurtosis',
@@ -611,6 +851,11 @@ const messages = {
     windowUnit: 'windows',
     rowsUnit: 'rows',
     occurredAt: 'Occurred At',
+    endedAt: 'Ended At',
+    duration: 'Duration',
+    status: 'Status',
+    open: 'Open',
+    closed: 'Closed',
     equipment: 'Equipment',
     level: 'Level',
     message: 'Message',
@@ -635,7 +880,23 @@ const messages = {
     dangerRange: 'Danger',
     metricDetailHelp: 'Select a card to inspect the metric in detail.',
     expandedHint: 'Use wheel or drag to zoom, then use the right-side tools to restore or save the chart.',
-    close: 'Close'
+    close: 'Close',
+    focusEmptyTitle: 'Select an alarm to inspect',
+    focusEmptyHelp: 'Click an alarm row to load the 10-second pre/post event window in a focus analysis popup.',
+    openFocusModal: 'Open Focus Analysis',
+    focusRange: 'Analysis Range',
+    selectedRange: 'Selected Range',
+    selectedFft: 'Selected Range FFT',
+    focusRawTitle: 'Raw Vibration Around Alarm',
+    focusTrendTitle: 'Feature Flow',
+    focusAiResult: 'Selected Range AI Analysis',
+    loading: 'Loading',
+    noSelection: 'Drag or zoom the raw vibration chart to calculate FFT and features for the selected interval.',
+    clickAlarmForFocus: 'Click row for focus analysis',
+    samplesAnalyzed: 'Analyzed Samples',
+    originalSamples: 'Original Samples',
+    downsampled: 'Downsampled',
+    exactRange: 'Selected interval'
   }
 };
 
@@ -651,13 +912,15 @@ export default {
         { key: 'dashboard', labelKey: 'dashboard', segment: 'overview' },
         { key: 'vibration', labelKey: 'vibration', segment: 'raw' },
         { key: 'fft', labelKey: 'fft', segment: 'fft' },
-        { key: 'alarms', labelKey: 'alarms', segment: 'alarms' }
+        { key: 'alarms', labelKey: 'alarms', segment: 'alarms' },
+        { key: 'focus', labelKey: 'focusAnalysis', segment: 'focus' }
       ],
       segments: [
         { key: 'overview', labelKey: 'overview' },
         { key: 'raw', labelKey: 'raw' },
         { key: 'fft', labelKey: 'fftFeatures' },
-        { key: 'alarms', labelKey: 'alarmTab' }
+        { key: 'alarms', labelKey: 'alarmTab' },
+        { key: 'focus', labelKey: 'focusTab' }
       ],
       activeNav: 'dashboard',
       activeSegment: 'overview',
@@ -674,6 +937,14 @@ export default {
       analysisResults: [],
       equipmentLatestMap: {},
       alarms: [],
+      focusAlarm: null,
+      focusAnalysis: null,
+      focusSelection: null,
+      focusLoading: false,
+      focusSelectionLoading: false,
+      focusSelectionRange: null,
+      focusSelectionTimer: null,
+      showFocusModal: false,
       summary: {},
       metricHover: {
         visible: false,
@@ -695,7 +966,8 @@ export default {
         overview: 'overviewTitle',
         raw: 'rawTitle',
         fft: 'fftTitle',
-        alarms: 'alarmsTitle'
+        alarms: 'alarmsTitle',
+        focus: 'focusTitle'
       };
       return this.t(titleMap[this.activeSegment] || 'overviewTitle');
     },
@@ -1120,12 +1392,107 @@ export default {
         this.metricCard('6', this.t('anomalyScore'), 'anomalyScore', 4)
       ];
     },
+    confidenceGaugeOption() {
+      const confidence = Math.max(0, Math.min(1, Number(this.latestAnalysis.confidence || 0)));
+      return {
+        series: [
+          {
+            type: 'gauge',
+            startAngle: 180,
+            endAngle: 0,
+            center: ['50%', '76%'],
+            radius: '94%',
+            min: 0,
+            max: 1,
+            splitNumber: 8,
+            axisLine: {
+              lineStyle: {
+                width: 6,
+                color: [
+                  [0.25, '#FF6E76'],
+                  [0.5, '#FDDD60'],
+                  [0.75, '#58D9F9'],
+                  [1, '#7CFFB2']
+                ]
+              }
+            },
+            pointer: {
+              icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
+              length: '13%',
+              width: 18,
+              offsetCenter: [0, '-58%'],
+              itemStyle: {
+                color: 'auto'
+              }
+            },
+            axisTick: {
+              length: 10,
+              lineStyle: {
+                color: 'auto',
+                width: 2
+              }
+            },
+            splitLine: {
+              length: 18,
+              lineStyle: {
+                color: 'auto',
+                width: 4
+              }
+            },
+            axisLabel: {
+              color: '#464646',
+              fontSize: 12,
+              distance: -42,
+              rotate: 'tangential',
+              formatter: (value) => {
+                if (Math.abs(value - 0.875) < 0.001) {
+                  return this.t('gradeA');
+                }
+                if (Math.abs(value - 0.625) < 0.001) {
+                  return this.t('gradeB');
+                }
+                if (Math.abs(value - 0.375) < 0.001) {
+                  return this.t('gradeC');
+                }
+                if (Math.abs(value - 0.125) < 0.001) {
+                  return this.t('gradeD');
+                }
+                return '';
+              }
+            },
+            title: {
+              offsetCenter: [0, '-8%'],
+              fontSize: 14,
+              color: '#445064'
+            },
+            detail: {
+              fontSize: 28,
+              fontWeight: 700,
+              offsetCenter: [0, '-34%'],
+              valueAnimation: true,
+              formatter: (value) => `${Math.round(value * 100)}%`,
+              color: 'inherit'
+            },
+            data: [
+              {
+                value: confidence,
+                name: this.t('confidence')
+              }
+            ]
+          }
+        ]
+      };
+    },
     actualAlarmRows() {
       return this.alarms.map((alarm) => ({
         ...alarm,
         rawLevel: alarm.alarmLevel || 'normal',
+        rawStatus: alarm.status || 'open',
         alarmLevel: this.tLevel(alarm.alarmLevel),
+        status: this.t(alarm.status || 'open'),
         occurredAt: this.formatDateTime(alarm.occurredAt),
+        endedAt: this.formatDateTime(alarm.endedAt),
+        duration: this.formatDuration(alarm.durationSeconds),
         displayMessage: this.buildAlarmDisplayMessage(alarm)
       }));
     },
@@ -1155,6 +1522,7 @@ export default {
         return {
           equipmentCode: equipment.equipmentCode,
           equipmentName: equipment.equipmentName,
+          displayName: this.displayEquipmentName(equipment),
           location: equipment.location,
           alarmLevel: analysis.alarmLevel || 'normal',
           rms: analysis.rms,
@@ -1163,6 +1531,198 @@ export default {
           updatedAt: analysis.createdAt || analysis.measuredAt
         };
       });
+    },
+    selectedEquipmentName() {
+      const equipment = this.equipments.find((item) => item.equipmentCode === this.selectedEquipment);
+      return this.displayEquipmentName(equipment || { equipmentCode: this.selectedEquipment });
+    },
+    normalizedPrediction() {
+      return this.normalizePrediction(this.latestAnalysis.prediction);
+    },
+    isBroadBearingPrediction() {
+      return ['bearing', 'bearing_fault'].includes(this.normalizedPrediction);
+    },
+    predictionMetaText() {
+      const rawPrediction = this.latestAnalysis.prediction || '-';
+      const modelVersion = this.latestAnalysis.modelVersion || '-';
+      return `${rawPrediction} · ${this.t('modelVersion')} ${modelVersion}`;
+    },
+    predictionNote() {
+      if (this.isBroadBearingPrediction) {
+        return this.t('broadBearingNote');
+      }
+      if (this.latestAnalysis.prediction && this.latestAnalysis.alarmLevel === 'normal') {
+        return this.t('aiReferenceNote');
+      }
+      return '';
+    },
+    focusModalTitle() {
+      if (!this.focusAnalysis) {
+        return this.t('focusAnalysis');
+      }
+      return `${this.focusAnalysis.equipmentCode} · ${this.tLevel(this.focusAnalysis.alarmLevel)} #${this.focusAnalysis.alarmId}`;
+    },
+    focusSelectionRangeText() {
+      if (!this.focusSelectionRange) {
+        return '-';
+      }
+      return `${this.formatTimeOnly(this.focusSelectionRange.start)} - ${this.formatTimeOnly(this.focusSelectionRange.end)}`;
+    },
+    focusRawOption() {
+      const points = this.focusAnalysis?.points || [];
+      const data = points.map((point) => [point.timestamp, point.value]);
+      const occurredAt = this.toTime(this.focusAnalysis?.occurredAt);
+      const endedAt = this.toTime(this.focusAnalysis?.endedAt || this.focusAnalysis?.occurredAt);
+      return {
+        tooltip: {
+          trigger: 'axis',
+          confine: true,
+          position: (pt) => [pt[0], '10%'],
+          formatter: (params) => {
+            if (!params || params.length === 0) {
+              return '';
+            }
+            const point = params[0].value;
+            return [
+              `<strong>${this.t('rawSeries')}</strong>`,
+              new Date(point[0]).toLocaleString(),
+              `${Number(point[1]).toFixed(5)}`
+            ].join('<br/>');
+          }
+        },
+        toolbox: {
+          right: 18,
+          top: 8,
+          feature: {
+            dataZoom: { yAxisIndex: 'none' },
+            restore: {},
+            saveAsImage: {}
+          }
+        },
+        grid: { top: 48, left: 56, right: 26, bottom: 58 },
+        xAxis: {
+          type: 'time',
+          boundaryGap: false
+        },
+        yAxis: {
+          type: 'value',
+          scale: true
+        },
+        dataZoom: [
+          {
+            type: 'inside',
+            start: 0,
+            end: 100
+          },
+          {
+            start: 0,
+            end: 100,
+            height: 24
+          }
+        ],
+        series: [
+          {
+            name: this.t('rawSeries'),
+            type: 'line',
+            smooth: false,
+            symbol: 'none',
+            sampling: 'lttb',
+            areaStyle: {
+              color: 'rgba(0, 141, 213, 0.14)'
+            },
+            lineStyle: {
+              color: '#008dd5',
+              width: 1.4
+            },
+            markArea: {
+              silent: true,
+              itemStyle: { color: 'rgba(214, 69, 69, 0.08)' },
+              data: Number.isFinite(occurredAt) ? [[
+                { xAxis: occurredAt, name: this.t('alarmTab') },
+                { xAxis: Number.isFinite(endedAt) ? endedAt : occurredAt }
+              ]] : []
+            },
+            data
+          }
+        ]
+      };
+    },
+    focusFftOption() {
+      const fft = this.focusSelection?.fft;
+      const data = fft && fft.frequencies
+        ? fft.frequencies.map((frequency, index) => [frequency, fft.magnitudes[index] || 0])
+        : [];
+      return {
+        tooltip: {
+          trigger: 'axis',
+          confine: true,
+          formatter: (params) => {
+            if (!params || params.length === 0) {
+              return '';
+            }
+            const point = params[0].value;
+            return [
+              `<strong>${this.t('selectedFft')}</strong>`,
+              `${Number(point[0]).toFixed(2)} Hz`,
+              `${Number(point[1]).toExponential(3)}`
+            ].join('<br/>');
+          }
+        },
+        grid: { top: 30, left: 54, right: 26, bottom: 44 },
+        xAxis: { type: 'value', name: 'Hz', min: 0 },
+        yAxis: { type: 'value', scale: true },
+        dataZoom: [{ type: 'inside' }, { height: 20 }],
+        series: [
+          {
+            name: this.t('selectedFft'),
+            type: 'line',
+            symbol: 'none',
+            smooth: true,
+            lineStyle: { color: '#6254a8', width: 1.4 },
+            data
+          }
+        ]
+      };
+    },
+    focusFeatureTrendOption() {
+      const rows = this.focusAnalysis?.analysisTrend || [];
+      return {
+        tooltip: { trigger: 'axis', confine: true },
+        legend: {
+          top: 2,
+          data: [this.t('rms'), this.t('peakToPeak'), this.t('anomalyScore')]
+        },
+        grid: { top: 44, left: 56, right: 28, bottom: 44 },
+        xAxis: { type: 'time', boundaryGap: false },
+        yAxis: { type: 'value', scale: true },
+        dataZoom: [{ type: 'inside' }, { height: 20 }],
+        series: [
+          {
+            name: this.t('rms'),
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 4,
+            data: rows.map((row) => [this.toTime(row.measuredAt), row.rms])
+          },
+          {
+            name: this.t('peakToPeak'),
+            type: 'line',
+            smooth: true,
+            symbol: 'none',
+            data: rows.map((row) => [this.toTime(row.measuredAt), row.peakToPeak]),
+            lineStyle: { color: '#f6a609' }
+          },
+          {
+            name: this.t('anomalyScore'),
+            type: 'line',
+            smooth: true,
+            symbol: 'none',
+            data: rows.map((row) => [this.toTime(row.measuredAt), row.anomalyScore]),
+            lineStyle: { color: '#d64545' }
+          }
+        ]
+      };
     }
   },
   async mounted() {
@@ -1171,6 +1731,9 @@ export default {
   },
   beforeDestroy() {
     this.stopRefreshTimer();
+    if (this.focusSelectionTimer) {
+      window.clearTimeout(this.focusSelectionTimer);
+    }
   },
   methods: {
     t(key) {
@@ -1187,6 +1750,73 @@ export default {
         unavailable: 'modelUnavailable'
       }[status || 'unavailable'];
       return this.t(statusKey || 'modelUnavailable');
+    },
+    displayEquipmentName(equipment) {
+      const code = equipment?.equipmentCode || '';
+      const name = equipment?.equipmentName || '';
+      if (!name || this.looksBrokenText(name)) {
+        return this.defaultEquipmentName(code);
+      }
+      return name;
+    },
+    defaultEquipmentName(equipmentCode) {
+      const koreanNames = {
+        MOTOR_001: '1번 모터',
+        MOTOR_002: '2번 모터',
+        MOTOR_003: '3번 모터'
+      };
+      const englishNames = {
+        MOTOR_001: 'Motor 1',
+        MOTOR_002: 'Motor 2',
+        MOTOR_003: 'Motor 3'
+      };
+      const names = this.language === 'ko' ? koreanNames : englishNames;
+      return names[equipmentCode] || equipmentCode || '-';
+    },
+    looksBrokenText(value) {
+      return /[ÃÂâêëìíîïð�]/.test(String(value));
+    },
+    normalizePrediction(prediction) {
+      return String(prediction || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    },
+    formatPrediction(prediction) {
+      if (!prediction) {
+        return '-';
+      }
+      const normalized = this.normalizePrediction(prediction);
+      const predictionKey = {
+        normal: 'predictionNormal',
+        healthy: 'predictionNormal',
+        h: 'predictionNormal',
+        bearing: 'predictionBearing',
+        bearing_fault: 'predictionBearing',
+        b: 'predictionBall',
+        ball: 'predictionBall',
+        bf: 'predictionBall',
+        ball_fault: 'predictionBall',
+        ir: 'predictionInnerRace',
+        inner: 'predictionInnerRace',
+        inner_race: 'predictionInnerRace',
+        inner_race_fault: 'predictionInnerRace',
+        inner_raceway: 'predictionInnerRace',
+        or: 'predictionOuterRace',
+        outer: 'predictionOuterRace',
+        outer_race: 'predictionOuterRace',
+        outer_race_fault: 'predictionOuterRace',
+        outer_raceway: 'predictionOuterRace',
+        looseness: 'predictionLooseness',
+        loose: 'predictionLooseness',
+        l: 'predictionLooseness',
+        misalignment: 'predictionMisalignment',
+        misaligned: 'predictionMisalignment',
+        m: 'predictionMisalignment',
+        unbalance: 'predictionUnbalance',
+        imbalance: 'predictionUnbalance',
+        u: 'predictionUnbalance',
+        not_trained: 'predictionUnknown',
+        prediction_error: 'predictionUnknown'
+      }[normalized];
+      return predictionKey ? this.t(predictionKey) : prediction;
     },
     async loadDashboard() {
       if (this.isRefreshing) {
@@ -1309,6 +1939,104 @@ export default {
     closeMetricDetail() {
       this.showMetricDetail = false;
       this.resizeChartsSoon();
+    },
+    async openFocusAnalysis(alarm) {
+      if (!alarm || !alarm.id) {
+        return;
+      }
+      this.activeNav = 'focus';
+      this.activeSegment = 'focus';
+      this.focusAlarm = alarm;
+      this.focusAnalysis = null;
+      this.focusSelection = null;
+      this.focusSelectionRange = null;
+      this.focusLoading = true;
+      this.showFocusModal = true;
+
+      try {
+        const response = await fetchAlarmFocusAnalysis(alarm.id, 10, 40000);
+        this.focusAnalysis = response;
+        const initialRange = this.defaultFocusSelectionRange(response);
+        if (initialRange) {
+          await this.loadFocusSelection(initialRange.start, initialRange.end);
+        }
+      } catch (error) {
+        console.warn('Failed to load alarm focus analysis', error);
+      } finally {
+        this.focusLoading = false;
+        this.resizeChartsSoon();
+      }
+    },
+    closeFocusModal() {
+      this.showFocusModal = false;
+      if (this.focusSelectionTimer) {
+        window.clearTimeout(this.focusSelectionTimer);
+        this.focusSelectionTimer = null;
+      }
+    },
+    defaultFocusSelectionRange(focusAnalysis) {
+      if (!focusAnalysis || !focusAnalysis.points || focusAnalysis.points.length === 0) {
+        return null;
+      }
+      const min = focusAnalysis.points[0].timestamp;
+      const max = focusAnalysis.points[focusAnalysis.points.length - 1].timestamp;
+      const occurred = this.toTime(focusAnalysis.occurredAt);
+      const ended = this.toTime(focusAnalysis.endedAt || focusAnalysis.occurredAt);
+      const center = Number.isFinite(occurred) ? occurred : (min + max) / 2;
+      const start = Math.max(min, center - 1000);
+      const end = Math.min(max, Math.max(Number.isFinite(ended) ? ended + 1000 : center + 1000, start + 1000));
+      return { start, end };
+    },
+    handleFocusRawZoom(params) {
+      if (!this.focusAnalysis || !this.focusAnalysis.points || this.focusAnalysis.points.length < 2) {
+        return;
+      }
+      const action = (params.batch || [params])[0] || {};
+      const points = this.focusAnalysis.points;
+      const min = points[0].timestamp;
+      const max = points[points.length - 1].timestamp;
+      let start = action.startValue;
+      let end = action.endValue;
+
+      if (start === undefined || end === undefined) {
+        const startPercent = action.start === undefined ? 0 : action.start;
+        const endPercent = action.end === undefined ? 100 : action.end;
+        start = min + (max - min) * (startPercent / 100);
+        end = min + (max - min) * (endPercent / 100);
+      }
+
+      start = Math.max(min, Number(start));
+      end = Math.min(max, Number(end));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return;
+      }
+
+      if (this.focusSelectionTimer) {
+        window.clearTimeout(this.focusSelectionTimer);
+      }
+      this.focusSelectionTimer = window.setTimeout(() => {
+        this.loadFocusSelection(start, end);
+      }, 450);
+    },
+    async loadFocusSelection(startMillis, endMillis) {
+      if (!this.focusAnalysis?.alarmId) {
+        return;
+      }
+      this.focusSelectionRange = { start: startMillis, end: endMillis };
+      this.focusSelectionLoading = true;
+      try {
+        this.focusSelection = await fetchAlarmFocusSelection(
+          this.focusAnalysis.alarmId,
+          Math.round(startMillis),
+          Math.round(endMillis),
+          64000
+        );
+      } catch (error) {
+        console.warn('Failed to analyze focus selection', error);
+      } finally {
+        this.focusSelectionLoading = false;
+        this.resizeChartsSoon();
+      }
     },
     setActiveSegment(segment, syncNav) {
       this.activeSegment = segment;
@@ -1570,16 +2298,47 @@ export default {
       }
       return date.toLocaleString(this.language === 'ko' ? 'ko-KR' : 'en-US');
     },
+    formatTimeOnly(value) {
+      if (!value) {
+        return '-';
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return '-';
+      }
+      return date.toLocaleTimeString(this.language === 'ko' ? 'ko-KR' : 'en-US');
+    },
+    formatFocusRange(focusAnalysis) {
+      if (!focusAnalysis) {
+        return '-';
+      }
+      return `${this.formatDateTime(focusAnalysis.rangeStart)} - ${this.formatDateTime(focusAnalysis.rangeEnd)}`;
+    },
+    formatDuration(seconds) {
+      if (seconds === undefined || seconds === null) {
+        return '-';
+      }
+      const totalSeconds = Math.max(0, Number(seconds));
+      const minutes = Math.floor(totalSeconds / 60);
+      const remainder = Math.floor(totalSeconds % 60);
+      if (minutes <= 0) {
+        return `${remainder}s`;
+      }
+      return `${minutes}m ${remainder}s`;
+    },
     buildAlarmDisplayMessage(alarm) {
       const level = this.tLevel(alarm.alarmLevel);
+      const status = this.t(alarm.status || 'open');
+      const duration = this.formatDuration(alarm.durationSeconds);
+      const prediction = this.formatPrediction(alarm.prediction);
       const score = this.formatNumber(alarm.anomalyScore, 4);
       const rms = this.formatNumber(alarm.rms, 5);
       const peakToPeak = this.formatNumber(alarm.peakToPeak, 5);
       const kurtosis = this.formatNumber(alarm.kurtosis, 3);
       if (this.language === 'ko') {
-        return `${alarm.equipmentCode} ${level}: 이상점수 ${score}, RMS ${rms}, P2P ${peakToPeak}, Kurtosis ${kurtosis}`;
+        return `${alarm.equipmentCode} ${level} ${status}: 지속 ${duration}, AI ${prediction}, 이상점수 ${score}, RMS ${rms}, P2P ${peakToPeak}, Kurtosis ${kurtosis}`;
       }
-      return `${alarm.equipmentCode} ${level}: score ${score}, RMS ${rms}, P2P ${peakToPeak}, kurtosis ${kurtosis}`;
+      return `${alarm.equipmentCode} ${level} ${status}: duration ${duration}, AI ${prediction}, score ${score}, RMS ${rms}, P2P ${peakToPeak}, kurtosis ${kurtosis}`;
     },
     toTime(value) {
       if (typeof value === 'number') {

@@ -64,6 +64,20 @@ export async function fetchAlarms(limit = 100) {
   return response.data;
 }
 
+export async function fetchAlarmFocusAnalysis(alarmId, paddingSeconds = 10, maxPoints = 40000) {
+  const response = await api.get(`/alarms/${alarmId}/focus-analysis`, {
+    params: { paddingSeconds, maxPoints }
+  });
+  return response.data;
+}
+
+export async function fetchAlarmFocusSelection(alarmId, startMillis, endMillis, maxSamples = 64000) {
+  const response = await api.get(`/alarms/${alarmId}/focus-analysis/selection`, {
+    params: { startMillis, endMillis, maxSamples }
+  });
+  return response.data;
+}
+
 export async function fetchDashboardSummary() {
   const response = await api.get('/dashboard/summary');
   return response.data;

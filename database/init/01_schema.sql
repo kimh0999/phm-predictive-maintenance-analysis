@@ -64,9 +64,14 @@ CREATE TABLE IF NOT EXISTS alarm_history (
   equipment_code VARCHAR(50) NOT NULL,
   analysis_result_id BIGINT NOT NULL,
   alarm_level VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'open',
   message VARCHAR(255) NOT NULL,
   occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ended_at DATETIME,
+  duration_seconds BIGINT,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_alarm_history_equipment_time (equipment_code, occurred_at),
+  INDEX idx_alarm_history_equipment_status (equipment_code, status, occurred_at),
   CONSTRAINT fk_alarm_history_equipment
     FOREIGN KEY (equipment_code) REFERENCES equipment (equipment_code),
   CONSTRAINT fk_alarm_history_analysis

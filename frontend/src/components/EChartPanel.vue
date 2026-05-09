@@ -50,7 +50,15 @@ export default {
         return;
       }
       const zoomState = this.dataZoomState;
-      this.chart.setOption(this.option, {
+      const stableOption = {
+        animation: false,
+        animationDuration: 0,
+        animationDurationUpdate: 0,
+        animationEasing: 'linear',
+        animationEasingUpdate: 'linear',
+        ...this.option
+      };
+      this.chart.setOption(stableOption, {
         notMerge: false,
         lazyUpdate: true
       });
@@ -76,17 +84,16 @@ export default {
         return;
       }
 
+      this.$emit('datazoom', params);
       const actions = params.batch || [params];
       this.dataZoomState = actions
         .map((action) => ({
           dataZoomIndex: action.dataZoomIndex,
           dataZoomId: action.dataZoomId,
           start: action.start,
-          end: action.end,
-          startValue: action.startValue,
-          endValue: action.endValue
+          end: action.end
         }))
-        .filter((action) => action.start !== undefined || action.end !== undefined || action.startValue !== undefined || action.endValue !== undefined);
+        .filter((action) => action.start !== undefined || action.end !== undefined);
     },
     restoreDataZoom(zoomState) {
       this.restoringZoom = true;

@@ -56,6 +56,14 @@ Gradle build stage -> bootJar -> JRE runtime image
 docker compose up --build backend
 ```
 
+Docker profile에서는 compose service name을 사용합니다.
+
+```text
+MySQL: mysql:3306
+Mosquitto: mosquitto:1883
+FastAPI: http://ai-api:8001
+```
+
 ## Vue
 
 Vue는 `package.json`과 lock file 기준으로 관리합니다.
@@ -66,11 +74,21 @@ Vue는 `package.json`과 lock file 기준으로 관리합니다.
 npm ci -> npm run build -> nginx static serving
 ```
 
+현재 frontend Dockerfile은 이 방식으로 구성되어 있습니다. Nginx는 `/api/*` 요청을 `http://backend:8080/api/*`로 proxy합니다.
+
 ## Node-RED, Mosquitto, MySQL
 
 - Node-RED: 공식 image + `node-red/` volume
 - Mosquitto: 공식 image + `mqtt/mosquitto.conf`
 - MySQL: 공식 image + `database/init/*.sql`
+
+Node-RED Docker flow는 컨테이너 경로와 service name을 사용합니다.
+
+```text
+JSONL: /project-data/jsonl/*.jsonl
+MQTT broker: mosquitto
+Reset API: http://backend:8080/api/debug/reset-data
+```
 
 ## Docker Compose Service Names
 
@@ -83,3 +101,31 @@ backend -> mosquitto: mosquitto:1883
 ```
 
 Ubuntu에서 직접 실행할 때는 기존처럼 `localhost`를 사용합니다.
+
+## Full Compose Run
+
+전체 서비스를 Docker로 실행:
+
+```bash
+docker compose up --build
+```
+
+브라우저:
+
+```text
+Vue dashboard: http://localhost:5173
+Spring Boot:   http://localhost:8080
+FastAPI docs:  http://localhost:8001/docs
+Node-RED:      http://localhost:1880
+MySQL:         localhost:3306
+Mosquitto:     localhost:1883
+```
+
+DB 스키마 변경 후 named volume까지 초기화하려면:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+주의: `docker compose up -v`가 아니라, 볼륨 삭제는 `down -v`에서 합니다.
