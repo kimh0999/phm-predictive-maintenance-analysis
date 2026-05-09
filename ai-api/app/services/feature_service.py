@@ -5,6 +5,7 @@ import math
 import numpy as np
 from scipy.stats import kurtosis as scipy_kurtosis
 
+from app.core.config import settings
 from app.schemas.vibration_schema import FeatureResponse, FftResponse
 from app.services.fft_service import calculate_fft, peak_frequency
 
@@ -26,11 +27,16 @@ def calculate_features(values: list[float], sampling_rate: int) -> tuple[Feature
         crestFactor=round(crest_factor, 8),
         kurtosis=round(kurtosis_value, 8),
     )
+    display_frequencies, display_magnitudes = _downsample_fft(
+        frequencies,
+        magnitudes,
+        settings.fft_max_bins,
+    )
     fft = FftResponse(
         frequencyResolution=round(float(frequencies[1] - frequencies[0]), 8) if len(frequencies) > 1 else 0.0,
-        binCount=len(frequencies),
-        frequencies=np.round(frequencies, decimals=8).tolist(),
-        magnitudes=np.round(magnitudes, decimals=8).tolist(),
+        binCount=len(display_frequencies),
+        frequencies=np.round(display_frequencies, decimals=8).tolist(),
+        magnitudes=np.round(display_magnitudes, decimals=8).tolist(),
     )
 
     return features, fft
@@ -70,3 +76,15 @@ def _safe_float(value: float) -> float:
 
 def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     return max(lower, min(upper, value))
+
+
+def _downsample_fft(
+    frequencies: np.ndarray,
+    magnitudes: np.ndarray,
+    max_bins: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if max_bins <= 0 or len(frequencies) <= max_bins:
+        return frequencies, magnitudes
+
+    indices = np.linspace(0, len(frequencies) - 1, num=max_bins, dtype=int)
+    return frequencies[indices], magnitudes[indices]

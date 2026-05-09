@@ -13,6 +13,7 @@ class VibrationWindowRequest(BaseModel):
     windowSize: int = Field(gt=0)
     windowIndex: int = Field(ge=0)
     values: list[float] = Field(min_length=1)
+    spectrogram: list[list[float]] | None = None
 
     @model_validator(mode="after")
     def validate_window_size(self) -> VibrationWindowRequest:
@@ -50,3 +51,8 @@ class AnalyzeResponse(BaseModel):
     prediction: str
     confidence: float
     modelVersion: str
+    modelInputType: str | None = None
+    modelInputSize: int | None = None
+    modelExpectedInputSize: int | None = None
+    modelInputStrategy: str | None = None
+    modelStatus: str = "unavailable"

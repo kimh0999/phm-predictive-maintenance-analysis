@@ -58,37 +58,39 @@ MAT 구조 확인:
 
 ```bash
 cd ..
-python scripts/inspect_mat.py data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_8000/RotatingSpeed_1200/H_H_8_6204_1200.mat
+python scripts/inspect_mat.py data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_16000/RotatingSpeed_1200/H_H_16_6204_1200.mat
 ```
 
 MAT -> JSONL 변환:
 
 ```bash
 python scripts/convert_mat_to_jsonl.py \
-  --input data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_8000/RotatingSpeed_1200/H_H_8_6204_1200.mat \
-  --output data/jsonl/MOTOR_001_H_H_8_6204_1200_2048_20.jsonl \
+  --input data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_16000/RotatingSpeed_1200/H_H_16_6204_1200.mat \
+  --output data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl \
   --equipment-id MOTOR_001 \
-  --window-size 2048 \
-  --max-windows 20 \
-  --start-time 2026-05-06T12:00:00Z
+  --window-size 32000 \
+  --stride 16000 \
+  --max-windows 79 \
+  --start-time 2026-05-06T12:00:00Z \
+  --decimals 6
 ```
 
 결과 확인:
 
 ```bash
-head -n 1 data/jsonl/MOTOR_001_H_H_8_6204_1200_2048_20.jsonl
-wc -l data/jsonl/MOTOR_001_H_H_8_6204_1200_2048_20.jsonl
+head -n 1 data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
+wc -l data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
 ```
 
 프론트 실시간 확인용 긴 설비별 샘플:
 
 ```text
-data/jsonl/MOTOR_001_H_H_8_6204_1200_2048_200.jsonl
-data/jsonl/MOTOR_002_H_IR_8_6204_1200_2048_200.jsonl
-data/jsonl/MOTOR_003_H_OR_8_6204_1200_2048_200.jsonl
+data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
+data/jsonl/MOTOR_002_H_IR_16_6204_1200_32000_79.jsonl
+data/jsonl/MOTOR_003_U1_H_16_6204_1200_32000_79.jsonl
 ```
 
-Node-RED flow는 위 3개 파일을 병렬로 읽습니다. 각 브랜치가 1 msg/sec로 발행하므로 각 설비는 약 1초마다 갱신됩니다.
+Node-RED flow는 위 3개 파일을 병렬로 읽습니다. 각 브랜치가 1 msg / 2 sec로 발행하므로 각 설비는 약 2초마다 갱신됩니다.
 
 Node-RED flow:
 

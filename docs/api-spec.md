@@ -10,6 +10,14 @@ GET /api/alarms
 GET /api/dashboard/summary
 ```
 
+Raw vibration chart endpoint:
+
+```text
+GET /api/equipments/{equipmentCode}/vibration-windows/raw-series?limit=5&maxPoints=8000
+```
+
+This endpoint returns downsampled chart points. `sampleCount` is the returned display point count. `originalSampleCount` is the raw sample count before downsampling.
+
 ## FastAPI
 
 ```text
@@ -25,11 +33,11 @@ Request:
 {
   "equipmentId": "MOTOR_001",
   "timestamp": "2026-05-06T12:00:00.000Z",
-  "samplingRate": 8000,
+  "samplingRate": 16000,
   "rpm": 1200,
-  "windowSize": 2,
+  "windowSize": 32000,
   "windowIndex": 0,
-  "values": [-0.13646967, -0.1220464]
+  "values": [-0.13646967, -0.1220464, "..."]
 }
 ```
 
@@ -39,9 +47,9 @@ Response:
 {
   "equipmentId": "MOTOR_001",
   "timestamp": "2026-05-06T12:00:00.000Z",
-  "samplingRate": 8000,
+  "samplingRate": 16000,
   "rpm": 1200,
-  "windowSize": 2,
+  "windowSize": 32000,
   "windowIndex": 0,
   "features": {
     "rms": 0.0,
@@ -51,18 +59,23 @@ Response:
     "kurtosis": 0.0
   },
   "fft": {
-    "frequencyResolution": 4000.0,
-    "binCount": 2,
+    "frequencyResolution": 0.5,
+    "binCount": 16001,
     "frequencies": [0.0, 3.90625],
     "magnitudes": [0.0, 0.0]
   },
   "anomalyScore": 0.0,
   "alarmLevel": "normal",
-  "prediction": "not_trained",
-  "confidence": 0.0,
-  "modelVersion": "signal-features-v0"
+  "prediction": "bearing",
+  "confidence": 0.87,
+  "modelVersion": "spectrogram-pca-rf-v1",
+  "modelInputType": "spectrogram",
+  "modelInputSize": 32000,
+  "modelExpectedInputSize": 4096,
+  "modelInputStrategy": "stft_spectrogram_64x64_from_raw",
+  "modelStatus": "loaded"
 }
 ```
 
-현재 `prediction`은 AI 모델 연결 전이므로 `not_trained`로 반환합니다.
-실제 `windowSize=2048` payload를 보내면 FFT bin은 `1025`개가 반환됩니다.
+현재 AI 모델이 없으면 `prediction=not_trained`, `modelStatus=missing`으로 내려옵니다.
+실제 `windowSize=32000` payload를 보내면 FFT bin은 `16001`개가 반환됩니다.

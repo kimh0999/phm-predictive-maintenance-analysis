@@ -405,6 +405,44 @@ h1 {
   background: #ffffff;
 }
 
+.model-result-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 10px;
+  max-width: 1220px;
+  margin-top: 14px;
+}
+
+.model-result-card {
+  min-width: 0;
+  border: 1px solid #dfe4ea;
+  background: #ffffff;
+  padding: 12px 14px;
+}
+
+.model-result-card span,
+.model-result-card small {
+  display: block;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-result-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+  color: #111827;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.model-result-card small {
+  margin-top: 7px;
+}
+
 .metric-card {
   position: relative;
   display: block;
@@ -990,6 +1028,7 @@ h1 {
 	  .summary-line,
 	  .system-strip,
 	  .metric-stat-strip,
+	  .model-result-strip,
 	  .kpi-grid,
 	  .chart-grid,
 	  .overview-grid,

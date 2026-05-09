@@ -20,6 +20,14 @@ public record RawVibrationWindowResponse(
 ) {
 
     public static RawVibrationWindowResponse from(VibrationWindow vibrationWindow, VibrationWindowMessage message) {
+        return from(vibrationWindow, message, true);
+    }
+
+    public static RawVibrationWindowResponse from(
+            VibrationWindow vibrationWindow,
+            VibrationWindowMessage message,
+            boolean includeValues
+    ) {
         return new RawVibrationWindowResponse(
                 vibrationWindow.getId(),
                 vibrationWindow.getEquipmentCode(),
@@ -31,7 +39,7 @@ public record RawVibrationWindowResponse(
                 vibrationWindow.getWindowSize(),
                 vibrationWindow.getWindowIndex(),
                 vibrationWindow.getRawFilePath(),
-                message.getValues()
+                includeValues ? message.getValues() : List.of()
         );
     }
 }

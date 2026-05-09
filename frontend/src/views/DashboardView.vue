@@ -92,7 +92,10 @@
         <article class="system-card">
           <span class="system-label">{{ t('windowsStored') }}</span>
           <strong>{{ summary.recentAnalysisCount || analysisResults.length }}</strong>
-          <small>{{ t('rawWindows') }} {{ rawSeries.windowCount || 0 }} · {{ t('samples') }} {{ rawSeries.sampleCount || 0 }}</small>
+          <small>
+            {{ t('rawWindows') }} {{ rawSeries.windowCount || 0 }} ·
+            {{ t('displaySamples') }} {{ rawSeries.sampleCount || 0 }}/{{ rawSeries.originalSampleCount || rawSeries.sampleCount || 0 }}
+          </small>
         </article>
         <article class="system-card">
           <span class="system-label">{{ t('latestEquipment') }}</span>
@@ -134,6 +137,28 @@
       </section>
 
       <section v-show="isSegmentVisible('fft')" class="metric-workspace">
+        <div class="model-result-strip">
+          <article class="model-result-card">
+            <span>{{ t('aiPrediction') }}</span>
+            <strong>{{ latestAnalysis.prediction || '-' }}</strong>
+            <small>{{ t('modelVersion') }} {{ latestAnalysis.modelVersion || '-' }}</small>
+          </article>
+          <article class="model-result-card">
+            <span>{{ t('modelStatus') }}</span>
+            <strong>{{ tModelStatus(latestAnalysis.modelStatus) }}</strong>
+            <small>{{ t('modelInputType') }} {{ latestAnalysis.modelInputType || '-' }}</small>
+          </article>
+          <article class="model-result-card">
+            <span>{{ t('confidence') }}</span>
+            <strong>{{ formatPercent(latestAnalysis.confidence) }}</strong>
+            <small>{{ t('modelExpectedInput') }} {{ latestAnalysis.modelExpectedInputSize || '-' }}</small>
+          </article>
+          <article class="model-result-card">
+            <span>{{ t('alarmDecision') }}</span>
+            <strong :class="['alarm-text', latestAnalysis.alarmLevel || 'normal']">{{ tLevel(latestAnalysis.alarmLevel) }}</strong>
+            <small>{{ latestAnalysis.modelInputStrategy || t('modelConfidenceHelp') }}</small>
+          </article>
+        </div>
         <div class="kpi-grid">
           <article
             v-for="metric in metricCards"
@@ -448,12 +473,25 @@ const messages = {
     windowsStored: '최근 분석 Window',
     rawWindows: '원본 Window',
     samples: '샘플',
+    displaySamples: '표시 샘플',
     latestEquipment: '선택 설비',
     serverStatus: '서버 상태',
     latestWindow: '최신 Window',
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: '이상 점수',
+    aiPrediction: 'AI 예측',
+    confidence: '신뢰도',
+    modelVersion: '모델',
+    modelStatus: '모델 상태',
+    modelInputType: '입력',
+    modelExpectedInput: '기대 입력',
+    modelLoaded: '로드됨',
+    modelMissing: '모델 없음',
+    modelError: '오류',
+    modelUnavailable: '미사용',
+    alarmDecision: '알람 판정',
+    modelConfidenceHelp: '모델 predict_proba 기준',
     peakToPeak: 'Peak-to-Peak',
     crestFactor: 'Crest Factor',
     kurtosis: 'Kurtosis',
@@ -531,12 +569,25 @@ const messages = {
     windowsStored: 'Recent Analysis Windows',
     rawWindows: 'Raw Windows',
     samples: 'Samples',
+    displaySamples: 'Display Samples',
     latestEquipment: 'Selected Equipment',
     serverStatus: 'Server Status',
     latestWindow: 'Latest Window',
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: 'Anomaly Score',
+    aiPrediction: 'AI Prediction',
+    confidence: 'Confidence',
+    modelVersion: 'Model',
+    modelStatus: 'Model Status',
+    modelInputType: 'Input',
+    modelExpectedInput: 'Expected Input',
+    modelLoaded: 'Loaded',
+    modelMissing: 'Missing',
+    modelError: 'Error',
+    modelUnavailable: 'Unavailable',
+    alarmDecision: 'Alarm Decision',
+    modelConfidenceHelp: 'Based on model predict_proba',
     peakToPeak: 'Peak-to-Peak',
     crestFactor: 'Crest Factor',
     kurtosis: 'Kurtosis',
@@ -619,7 +670,7 @@ export default {
       equipments: [],
       selectedEquipment: 'MOTOR_001',
       latestRaw: {},
-      rawSeries: { points: [] },
+      rawSeries: { points: [], sampleCount: 0, originalSampleCount: 0, downsampled: false },
       analysisResults: [],
       equipmentLatestMap: {},
       alarms: [],
@@ -630,7 +681,12 @@ export default {
         x: 0,
         y: 0
       },
-      refreshTimer: null
+      refreshTimer: null,
+      refreshIntervalMs: 3000,
+      rawSeriesWindowLimit: 5,
+      rawSeriesMaxPoints: 8000,
+      analysisResultLimit: 180,
+      alarmLimit: 50
     };
   },
   computed: {
@@ -1123,6 +1179,15 @@ export default {
     tLevel(level) {
       return this.t(level || 'normal');
     },
+    tModelStatus(status) {
+      const statusKey = {
+        loaded: 'modelLoaded',
+        missing: 'modelMissing',
+        error: 'modelError',
+        unavailable: 'modelUnavailable'
+      }[status || 'unavailable'];
+      return this.t(statusKey || 'modelUnavailable');
+    },
     async loadDashboard() {
       if (this.isRefreshing) {
         return;
@@ -1155,9 +1220,9 @@ export default {
         );
         const [rawWindow, rawSeries, analysisResults, alarms, equipmentLatestEntries] = await Promise.all([
           fetchLatestRawWindow(equipmentCode),
-          fetchRawVibrationSeries(equipmentCode, 20),
-          fetchAnalysisResults(equipmentCode, 300),
-          fetchAlarms(100),
+          fetchRawVibrationSeries(equipmentCode, this.rawSeriesWindowLimit, this.rawSeriesMaxPoints),
+          fetchAnalysisResults(equipmentCode, this.analysisResultLimit),
+          fetchAlarms(this.alarmLimit),
           equipmentLatestPromise
         ]);
 
@@ -1188,7 +1253,7 @@ export default {
         if (this.autoRefresh) {
           this.loadDashboard();
         }
-      }, 1000);
+      }, this.refreshIntervalMs);
     },
     stopRefreshTimer() {
       if (this.refreshTimer) {
@@ -1488,6 +1553,12 @@ export default {
         return '-';
       }
       return Number(value).toFixed(decimals);
+    },
+    formatPercent(value) {
+      if (value === undefined || value === null) {
+        return '-';
+      }
+      return `${(Number(value) * 100).toFixed(1)}%`;
     },
     formatDateTime(value) {
       if (!value) {

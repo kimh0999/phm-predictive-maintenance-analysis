@@ -7,7 +7,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 import com.example.phm.config.StorageProperties;
 import com.example.phm.vibration.dto.VibrationWindowMessage;
@@ -44,6 +47,35 @@ public class RawWindowFileStorageService {
             return target.toAbsolutePath().normalize().toString();
         } catch (java.io.IOException exception) {
             throw new UncheckedIOException("Failed to save raw vibration window file", exception);
+        }
+    }
+
+    public long deleteAll() {
+        if (!Files.exists(rawWindowDir)) {
+            return 0L;
+        }
+
+        AtomicLong deletedFileCount = new AtomicLong();
+        try (Stream<Path> paths = Files.walk(rawWindowDir)) {
+            paths
+                    .filter(path -> !path.equals(rawWindowDir))
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> deletePath(path, deletedFileCount));
+            Files.createDirectories(rawWindowDir);
+            return deletedFileCount.get();
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to clear raw vibration window files", exception);
+        }
+    }
+
+    private void deletePath(Path path, AtomicLong deletedFileCount) {
+        try {
+            if (Files.isRegularFile(path)) {
+                deletedFileCount.incrementAndGet();
+            }
+            Files.deleteIfExists(path);
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to delete raw window path: " + path, exception);
         }
     }
 

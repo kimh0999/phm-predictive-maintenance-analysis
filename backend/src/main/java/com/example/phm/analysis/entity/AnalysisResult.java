@@ -49,6 +49,24 @@ public class AnalysisResult {
     @Column(name = "confidence")
     private Double confidence;
 
+    @Column(name = "model_version", length = 100)
+    private String modelVersion;
+
+    @Column(name = "model_input_type", length = 50)
+    private String modelInputType;
+
+    @Column(name = "model_input_size")
+    private Integer modelInputSize;
+
+    @Column(name = "model_expected_input_size")
+    private Integer modelExpectedInputSize;
+
+    @Column(name = "model_input_strategy", length = 150)
+    private String modelInputStrategy;
+
+    @Column(name = "model_status", length = 50)
+    private String modelStatus;
+
     @Column(name = "anomaly_score")
     private Double anomalyScore;
 
@@ -132,6 +150,54 @@ public class AnalysisResult {
 
     public void setConfidence(Double confidence) {
         this.confidence = confidence;
+    }
+
+    public String getModelVersion() {
+        return modelVersion;
+    }
+
+    public void setModelVersion(String modelVersion) {
+        this.modelVersion = modelVersion;
+    }
+
+    public String getModelInputType() {
+        return modelInputType;
+    }
+
+    public void setModelInputType(String modelInputType) {
+        this.modelInputType = modelInputType;
+    }
+
+    public Integer getModelInputSize() {
+        return modelInputSize;
+    }
+
+    public void setModelInputSize(Integer modelInputSize) {
+        this.modelInputSize = modelInputSize;
+    }
+
+    public Integer getModelExpectedInputSize() {
+        return modelExpectedInputSize;
+    }
+
+    public void setModelExpectedInputSize(Integer modelExpectedInputSize) {
+        this.modelExpectedInputSize = modelExpectedInputSize;
+    }
+
+    public String getModelInputStrategy() {
+        return modelInputStrategy;
+    }
+
+    public void setModelInputStrategy(String modelInputStrategy) {
+        this.modelInputStrategy = modelInputStrategy;
+    }
+
+    public String getModelStatus() {
+        return modelStatus;
+    }
+
+    public void setModelStatus(String modelStatus) {
+        this.modelStatus = modelStatus;
     }
 
     public Double getAnomalyScore() {

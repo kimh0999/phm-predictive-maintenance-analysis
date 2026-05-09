@@ -8,12 +8,12 @@ factory/motor/1/vibration/window
 
 ## Subscriber
 
-현재 backend는 이 topic을 구독해서 `VibrationWindowMessage` DTO로 변환한 뒤 로그로 확인합니다.
+현재 backend는 이 topic을 구독해서 `VibrationWindowMessage` DTO로 변환한 뒤 원본 저장, FastAPI 분석, MySQL 저장까지 수행합니다.
 
 성공 기준:
 
 ```text
-Received MQTT message: equipmentId=MOTOR_001, windowIndex=0, samplingRate=8000, rpm=1200, windowSize=2048, valuesLength=2048
+Received MQTT message: equipmentId=MOTOR_001, windowIndex=0, samplingRate=16000, rpm=1200, windowSize=32000, valuesLength=32000
 ```
 
 Payload:
@@ -22,9 +22,9 @@ Payload:
 {
   "equipmentId": "MOTOR_001",
   "timestamp": "2026-05-06T12:00:00.000Z",
-  "samplingRate": 8000,
+  "samplingRate": 16000,
   "rpm": 1200,
-  "windowSize": 2048,
+  "windowSize": 32000,
   "windowIndex": 0,
   "values": [-0.13646967, -0.1220464]
 }

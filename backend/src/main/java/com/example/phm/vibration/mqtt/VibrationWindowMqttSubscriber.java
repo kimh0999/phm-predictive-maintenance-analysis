@@ -77,7 +77,7 @@ public class VibrationWindowMqttSubscriber {
                     ingestionResult.rawFilePath()
             );
             log.info(
-                    "FastAPI response: equipmentId={}, windowIndex={}, rms={}, peakFrequency={}, peakToPeak={}, crestFactor={}, kurtosis={}, anomalyScore={}, alarmLevel={}",
+                    "FastAPI response: equipmentId={}, windowIndex={}, rms={}, peakFrequency={}, peakToPeak={}, crestFactor={}, kurtosis={}, prediction={}, confidence={}, modelVersion={}, modelInputStrategy={}, modelStatus={}, anomalyScore={}, alarmLevel={}",
                     analysis.getEquipmentId(),
                     analysis.getWindowIndex(),
                     features == null ? null : features.getRms(),
@@ -85,6 +85,11 @@ public class VibrationWindowMqttSubscriber {
                     features == null ? null : features.getPeakToPeak(),
                     features == null ? null : features.getCrestFactor(),
                     features == null ? null : features.getKurtosis(),
+                    analysis.getPrediction(),
+                    analysis.getConfidence(),
+                    analysis.getModelVersion(),
+                    analysis.getModelInputStrategy(),
+                    analysis.getModelStatus(),
                     analysis.getAnomalyScore(),
                     analysis.getAlarmLevel()
             );

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 5000
+  timeout: 8000
 });
 
 export async function fetchDatabaseStatus() {
@@ -17,7 +17,9 @@ export async function fetchEquipments() {
 
 export async function fetchLatestRawWindow(equipmentCode) {
   try {
-    const response = await api.get(`/equipments/${equipmentCode}/vibration-windows/latest/raw`);
+    const response = await api.get(`/equipments/${equipmentCode}/vibration-windows/latest/raw`, {
+      params: { includeValues: false }
+    });
     return response.data;
   } catch (error) {
     if (error.response && error.response.status === 404) {
@@ -27,15 +29,22 @@ export async function fetchLatestRawWindow(equipmentCode) {
   }
 }
 
-export async function fetchRawVibrationSeries(equipmentCode, limit = 20) {
+export async function fetchRawVibrationSeries(equipmentCode, limit = 5, maxPoints = 8000) {
   try {
     const response = await api.get(`/equipments/${equipmentCode}/vibration-windows/raw-series`, {
-      params: { limit }
+      params: { limit, maxPoints }
     });
     return response.data;
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      return { equipmentId: equipmentCode, windowCount: 0, sampleCount: 0, points: [] };
+      return {
+        equipmentId: equipmentCode,
+        windowCount: 0,
+        sampleCount: 0,
+        originalSampleCount: 0,
+        downsampled: false,
+        points: []
+      };
     }
     throw error;
   }

@@ -18,6 +18,11 @@ public class AnalyzeResponse {
     private String prediction;
     private Double confidence;
     private String modelVersion;
+    private String modelInputType;
+    private Integer modelInputSize;
+    private Integer modelExpectedInputSize;
+    private String modelInputStrategy;
+    private String modelStatus;
 
     public String getEquipmentId() {
         return equipmentId;
@@ -121,5 +126,45 @@ public class AnalyzeResponse {
 
     public void setModelVersion(String modelVersion) {
         this.modelVersion = modelVersion;
+    }
+
+    public String getModelInputType() {
+        return modelInputType;
+    }
+
+    public void setModelInputType(String modelInputType) {
+        this.modelInputType = modelInputType;
+    }
+
+    public Integer getModelInputSize() {
+        return modelInputSize;
+    }
+
+    public void setModelInputSize(Integer modelInputSize) {
+        this.modelInputSize = modelInputSize;
+    }
+
+    public Integer getModelExpectedInputSize() {
+        return modelExpectedInputSize;
+    }
+
+    public void setModelExpectedInputSize(Integer modelExpectedInputSize) {
+        this.modelExpectedInputSize = modelExpectedInputSize;
+    }
+
+    public String getModelInputStrategy() {
+        return modelInputStrategy;
+    }
+
+    public void setModelInputStrategy(String modelInputStrategy) {
+        this.modelInputStrategy = modelInputStrategy;
+    }
+
+    public String getModelStatus() {
+        return modelStatus;
+    }
+
+    public void setModelStatus(String modelStatus) {
+        this.modelStatus = modelStatus;
     }
 }

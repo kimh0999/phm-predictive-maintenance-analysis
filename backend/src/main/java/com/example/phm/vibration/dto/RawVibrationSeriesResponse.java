@@ -6,6 +6,8 @@ public record RawVibrationSeriesResponse(
         String equipmentId,
         int windowCount,
         int sampleCount,
+        int originalSampleCount,
+        boolean downsampled,
         Integer samplingRate,
         Long firstWindowIndex,
         Long lastWindowIndex,

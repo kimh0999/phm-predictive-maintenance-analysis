@@ -121,6 +121,12 @@ public class VibrationIngestionService {
         analysisResult.setKurtosis(features == null ? null : features.getKurtosis());
         analysisResult.setPrediction(analysis.getPrediction());
         analysisResult.setConfidence(analysis.getConfidence());
+        analysisResult.setModelVersion(analysis.getModelVersion());
+        analysisResult.setModelInputType(analysis.getModelInputType());
+        analysisResult.setModelInputSize(analysis.getModelInputSize());
+        analysisResult.setModelExpectedInputSize(analysis.getModelExpectedInputSize());
+        analysisResult.setModelInputStrategy(analysis.getModelInputStrategy());
+        analysisResult.setModelStatus(analysis.getModelStatus());
         analysisResult.setAnomalyScore(analysis.getAnomalyScore());
         analysisResult.setAlarmLevel(analysis.getAlarmLevel());
         return analysisResultRepository.save(analysisResult);

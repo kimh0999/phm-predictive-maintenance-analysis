@@ -41,6 +41,12 @@ analysis_result
 - kurtosis
 - prediction
 - confidence
+- model_version
+- model_input_type
+- model_input_size
+- model_expected_input_size
+- model_input_strategy
+- model_status
 - anomaly_score
 - alarm_level
 - created_at
