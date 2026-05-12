@@ -75,7 +75,7 @@ public class RawVibrationWindowController {
         for (VibrationWindow window : orderedWindows) {
             VibrationWindowMessage message = readRawWindowMessage(window);
             List<Double> values = message.getValues() == null ? List.of() : message.getValues();
-            double baseTimestamp = receivedTimestampMillis(window);
+            double baseTimestamp = measuredTimestampMillis(window);
             double intervalMillis = window.getSamplingRate() == null ? 1.0 : 1000.0 / window.getSamplingRate();
 
             for (int index = 0; index < values.size(); index++) {
@@ -118,8 +118,8 @@ public class RawVibrationWindowController {
         }
     }
 
-    private double receivedTimestampMillis(VibrationWindow window) {
-        LocalDateTime base = window.getCreatedAt() == null ? window.getMeasuredAt() : window.getCreatedAt();
+    private double measuredTimestampMillis(VibrationWindow window) {
+        LocalDateTime base = window.getMeasuredAt() == null ? window.getCreatedAt() : window.getMeasuredAt();
         return base.atZone(DEFAULT_ZONE).toInstant().toEpochMilli();
     }
 

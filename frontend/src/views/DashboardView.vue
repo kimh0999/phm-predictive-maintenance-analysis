@@ -2,10 +2,16 @@
   <div class="dashboard-shell">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark"></span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 21V10.5l5 2.8V10l5 3.3V10l5 3.2V21H3z"></path>
+            <path d="M4.5 10.5V5h3v7.2"></path>
+            <path d="M7 21v-4h3v4"></path>
+            <path d="M13 17h2M17 17h2M13 20h2M17 20h2"></path>
+          </svg>
+        </span>
         <span class="brand-text">{{ t('brand') }}</span>
       </div>
-      <div class="search-box">{{ t('search') }}</div>
       <nav class="nav-section">
         <button
           v-for="item in navItems"
@@ -30,11 +36,6 @@
           <h1>{{ activeTitle }}</h1>
         </div>
         <div class="toolbar">
-          <select v-model="selectedEquipment" class="easy-select" @change="loadDashboard">
-            <option v-for="equipment in equipments" :key="equipment.equipmentCode" :value="equipment.equipmentCode">
-              {{ equipment.equipmentCode }} · {{ displayEquipmentName(equipment) }}
-            </option>
-          </select>
           <select v-model="language" class="easy-select lang-select">
             <option value="ko">한국어</option>
             <option value="en">English</option>
@@ -71,19 +72,43 @@
         </div>
       </header>
 
-      <section class="segment-strip">
-        <button
-          v-for="segment in segments"
-          :key="segment.key"
-          :class="['segment', activeSegment === segment.key ? 'active' : '']"
-          type="button"
-          @click="setActiveSegment(segment.key, true)"
-        >
-          {{ t(segment.labelKey) }}
-        </button>
+      <section v-if="isEquipmentScopedSegment" class="equipment-control-strip">
+        <div class="equipment-control-copy">
+          <span>{{ t('equipmentSelector') }}</span>
+          <strong>{{ selectedEquipment || '-' }}</strong>
+          <em>{{ selectedEquipmentName }} · {{ latestRaw.rpm || '-' }} RPM · {{ latestRaw.samplingRate || '-' }} Hz</em>
+        </div>
+        <select v-model="selectedEquipment" class="easy-select equipment-select" @change="selectEquipment(selectedEquipment)">
+          <option v-for="equipment in equipments" :key="equipment.equipmentCode" :value="equipment.equipmentCode">
+            {{ equipment.equipmentCode }} · {{ displayEquipmentName(equipment) }}
+          </option>
+        </select>
       </section>
 
-      <section class="system-strip">
+      <section v-if="isFleetSegment" class="system-strip fleet-strip">
+        <article class="system-card">
+          <span class="system-label">{{ t('fleetStatus') }}</span>
+          <strong>{{ summary.equipmentCount || equipments.length }}</strong>
+          <small>{{ t('equipmentUnit') }} · {{ t('allEquipmentOverview') }}</small>
+        </article>
+        <article class="system-card">
+          <span class="system-label">{{ t('alarmSummary') }}</span>
+          <strong>{{ alarmCounts.warning + alarmCounts.danger }}</strong>
+          <small>{{ t('warning') }} {{ alarmCounts.warning }} · {{ t('danger') }} {{ alarmCounts.danger }}</small>
+        </article>
+        <article class="system-card">
+          <span class="system-label">{{ t('windowsStored') }}</span>
+          <strong>{{ summary.recentAnalysisCount || 0 }}</strong>
+          <small>{{ t('recentAlarms') }} {{ summary.recentAlarmCount || alarms.length }} {{ t('alarmUnit') }}</small>
+        </article>
+        <article class="system-card">
+          <span class="system-label">{{ t('serverStatus') }}</span>
+          <strong>{{ dbStatus.connected ? 'OK' : 'CHECK' }}</strong>
+          <small>Spring Boot · FastAPI · MySQL</small>
+        </article>
+      </section>
+
+      <section v-if="isEquipmentScopedSegment" class="system-strip">
         <article class="system-card">
           <span class="system-label">{{ t('collectionStatus') }}</span>
           <strong :class="['alarm-text', latestAnalysis.alarmLevel || 'normal']">{{ tLevel(latestAnalysis.alarmLevel) }}</strong>
@@ -109,7 +134,7 @@
         </article>
       </section>
 
-      <section class="summary-line">
+      <section v-if="isEquipmentScopedSegment" class="summary-line">
         <div class="summary-pill">
           <span class="label">{{ t('latestWindow') }}</span>
           <strong>#{{ latestRaw.windowIndex ?? '-' }}</strong>
@@ -172,6 +197,26 @@
                 </div>
               </article>
             </div>
+
+            <article class="monitor-panel focus-launch-panel">
+              <header class="panel-heading">
+                <div>
+                  <span>{{ t('focusAnalysis') }}</span>
+                  <strong>{{ t('currentFocusTitle') }}</strong>
+                </div>
+                <em>{{ selectedEquipment || '-' }}</em>
+              </header>
+              <div class="focus-launch-body">
+                <p>{{ t('currentFocusHelp') }}</p>
+                <button
+                  class="focus-open-button"
+                  type="button"
+                  @click="openCurrentFocusAnalysis"
+                >
+                  {{ t('openCurrentFocus') }}
+                </button>
+              </div>
+            </article>
           </div>
 
           <aside class="monitor-panel ai-analysis-panel">
@@ -253,13 +298,13 @@
               <em>{{ formattedLastUpdated }}</em>
             </header>
             <div class="equipment-health-list">
-              <button
-                v-for="row in equipmentHealthRows"
-                :key="row.equipmentCode"
-                :class="['equipment-health-row', selectedEquipment === row.equipmentCode ? 'selected' : '']"
-                type="button"
-                @click="selectEquipment(row.equipmentCode)"
-              >
+	              <button
+	                v-for="row in equipmentHealthRows"
+	                :key="row.equipmentCode"
+	                class="equipment-health-row"
+	                type="button"
+	                @click="selectEquipment(row.equipmentCode, 'raw')"
+	              >
                 <span class="equipment-code">{{ row.equipmentCode }}</span>
                 <span class="equipment-name">{{ row.displayName }}</span>
                 <span :class="['level-badge', row.alarmLevel]">{{ tLevel(row.alarmLevel) }}</span>
@@ -267,30 +312,6 @@
                 <span class="equipment-reading">{{ t('anomalyScore') }} {{ formatNumber(row.anomalyScore, 3) }}</span>
               </button>
             </div>
-          </article>
-        </div>
-
-        <div class="overview-grid lower">
-          <article class="monitor-panel wide-chart-panel">
-            <header class="panel-heading">
-              <div>
-                <span>{{ selectedEquipment }}</span>
-                <strong>{{ t('featureTrendTitle') }}</strong>
-              </div>
-              <em>{{ analysisResults.length }} {{ t('windowUnit') }}</em>
-            </header>
-            <EChartPanel :option="featureTrendOption" />
-          </article>
-
-          <article class="monitor-panel chart-panel">
-            <header class="panel-heading">
-              <div>
-                <span>{{ t('riskMap') }}</span>
-                <strong>{{ t('riskScatterTitle') }}</strong>
-              </div>
-              <em>{{ t('rms') }} · {{ t('kurtosis') }}</em>
-            </header>
-            <EChartPanel :option="riskScatterOption" />
           </article>
         </div>
 
@@ -419,29 +440,6 @@
         </article>
       </section>
 
-      <section v-show="isSegmentVisible('focus')" class="focus-workspace">
-        <article class="monitor-panel focus-empty-panel">
-          <header class="panel-heading">
-            <div>
-              <span>{{ t('focusAnalysis') }}</span>
-              <strong>{{ focusAnalysis ? `${focusAnalysis.equipmentCode} #${focusAnalysis.alarmId}` : t('focusEmptyTitle') }}</strong>
-            </div>
-            <em>{{ focusAnalysis ? t('openFocusModal') : t('alarmTab') }}</em>
-          </header>
-          <div class="focus-empty-content">
-            <p>{{ focusAnalysis ? formatFocusRange(focusAnalysis) : t('focusEmptyHelp') }}</p>
-            <button
-              v-if="focusAnalysis"
-              class="focus-open-button"
-              type="button"
-              @click="showFocusModal = true"
-            >
-              {{ t('openFocusModal') }}
-            </button>
-          </div>
-        </article>
-      </section>
-
       <div
         v-if="metricHover.visible && !showMetricDetail"
         class="metric-hover-tooltip"
@@ -513,7 +511,7 @@
                 <header class="panel-heading">
                   <div>
                     <span>{{ t('focusRange') }}</span>
-                    <strong>{{ t('focusRawTitle') }}</strong>
+                      <strong>{{ focusMode === 'alarm' ? t('focusRawTitle') : t('currentFocusRawTitle') }}</strong>
                   </div>
                   <em>{{ focusAnalysis.sampleCount }}/{{ focusAnalysis.originalSampleCount }} {{ t('samples') }}</em>
                 </header>
@@ -649,11 +647,16 @@ const messages = {
     lastUpdated: '최종 갱신',
     windowsStored: '최근 분석 Window',
     rawWindows: '원본 Window',
-    samples: '샘플',
-    displaySamples: '표시 샘플',
-    latestEquipment: '선택 설비',
-    serverStatus: '서버 상태',
-    latestWindow: '최신 Window',
+      samples: '샘플',
+      displaySamples: '표시 샘플',
+      latestEquipment: '선택 설비',
+      serverStatus: '서버 상태',
+      equipmentSelector: '분석 설비 선택',
+      allEquipmentOverview: '전체 설비 기준',
+      currentFocusTitle: '현재 데이터 집중 분석',
+      currentFocusHelp: '현재 선택된 설비의 최근 원본 진동과 특징값 흐름을 확대해서 분석합니다.',
+      openCurrentFocus: '현재 데이터 분석',
+      latestWindow: '최신 Window',
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: '이상 점수',
@@ -688,11 +691,18 @@ const messages = {
     gradeB: '양호',
     gradeC: '보통',
     gradeD: '낮음',
-    peakToPeak: 'Peak-to-Peak',
-    crestFactor: 'Crest Factor',
-    kurtosis: 'Kurtosis',
-    rawSeriesTitle: '누적 원본 진동 시계열',
-    featureTrendTitle: 'FFT/특징값 추세',
+      peakToPeak: 'Peak-to-Peak',
+      crestFactor: 'Crest Factor',
+      kurtosis: 'Kurtosis',
+      rawSeriesTitle: '누적 원본 진동 시계열',
+      timeAxis: '측정 시각',
+	    vibrationAmplitude: '진동 진폭',
+	    vibrationAmplitudeUnit: '진동 진폭 (a.u.)',
+	    frequencyAxis: '주파수 (Hz)',
+	    magnitudeAxis: 'FFT 크기',
+	    featureAxis: '특징값',
+      scoreAxis: '이상 점수 (0-1)',
+      featureTrendTitle: 'FFT/특징값 추세',
     sampleIndex: '샘플',
     equipmentDistribution: '설비 상태 분포',
     riskScatterTitle: 'RMS-Kurtosis 위험 공간',
@@ -740,15 +750,21 @@ const messages = {
     dangerRange: '위험',
     metricDetailHelp: '카드를 선택하면 해당 지표를 확대 분석합니다.',
     expandedHint: '마우스 휠/드래그로 구간을 확대하고, 우측 도구로 복원하거나 이미지로 저장할 수 있습니다.',
-    close: '닫기'
-    ,
+    close: '닫기',
     focusEmptyTitle: '분석할 알림을 선택하세요',
     focusEmptyHelp: '알람 이력에서 특정 알림 행을 클릭하면 발생 전후 10초 구간을 불러와 집중 분석 팝업을 엽니다.',
+    focusReadyHelp: '선택한 알림의 전후 구간을 원본 진동, FFT, 특징값 흐름으로 다시 확인할 수 있습니다.',
     openFocusModal: '집중 분석 열기',
     focusRange: '분석 구간',
+    preAlarmRange: '알림 전 구간',
+    alarmActiveRange: '위험 지속 구간',
+    postAlarmRange: '회복 확인 구간',
+    peakRiskRange: '최고 위험 구간',
+    peakRisk: '최고 위험',
     selectedRange: '선택 구간',
     selectedFft: '선택 구간 FFT',
     focusRawTitle: '알림 전후 원본 진동',
+    currentFocusRawTitle: '현재 원본 진동 구간',
     focusTrendTitle: '구간 특징값 흐름',
     focusAiResult: '선택 구간 AI 분석',
     loading: '불러오는 중',
@@ -789,11 +805,16 @@ const messages = {
     lastUpdated: 'Last updated',
     windowsStored: 'Recent Analysis Windows',
     rawWindows: 'Raw Windows',
-    samples: 'Samples',
-    displaySamples: 'Display Samples',
-    latestEquipment: 'Selected Equipment',
-    serverStatus: 'Server Status',
-    latestWindow: 'Latest Window',
+      samples: 'Samples',
+      displaySamples: 'Display Samples',
+      latestEquipment: 'Selected Equipment',
+      serverStatus: 'Server Status',
+      equipmentSelector: 'Analysis Equipment',
+      allEquipmentOverview: 'All equipment',
+      currentFocusTitle: 'Current Data Focus Analysis',
+      currentFocusHelp: 'Inspect the selected equipment using its latest raw vibration and feature trend.',
+      openCurrentFocus: 'Analyze Current Data',
+      latestWindow: 'Latest Window',
     rms: 'RMS',
     peakFrequency: 'Peak Frequency',
     anomalyScore: 'Anomaly Score',
@@ -828,11 +849,18 @@ const messages = {
     gradeB: 'Good',
     gradeC: 'Moderate',
     gradeD: 'Low',
-    peakToPeak: 'Peak-to-Peak',
-    crestFactor: 'Crest Factor',
-    kurtosis: 'Kurtosis',
-    rawSeriesTitle: 'Accumulated Raw Vibration Time Series',
-    featureTrendTitle: 'FFT / Feature Trend',
+      peakToPeak: 'Peak-to-Peak',
+      crestFactor: 'Crest Factor',
+      kurtosis: 'Kurtosis',
+      rawSeriesTitle: 'Accumulated Raw Vibration Time Series',
+      timeAxis: 'Measured Time',
+	    vibrationAmplitude: 'Vibration Amplitude',
+	    vibrationAmplitudeUnit: 'Vibration Amplitude (a.u.)',
+	    frequencyAxis: 'Frequency (Hz)',
+	    magnitudeAxis: 'FFT Magnitude',
+	    featureAxis: 'Feature Value',
+      scoreAxis: 'Anomaly Score (0-1)',
+      featureTrendTitle: 'FFT / Feature Trend',
     sampleIndex: 'Sample',
     equipmentDistribution: 'Equipment Status Distribution',
     riskScatterTitle: 'RMS vs Kurtosis Risk Space',
@@ -883,11 +911,18 @@ const messages = {
     close: 'Close',
     focusEmptyTitle: 'Select an alarm to inspect',
     focusEmptyHelp: 'Click an alarm row to load the 10-second pre/post event window in a focus analysis popup.',
+    focusReadyHelp: 'Review the selected alarm interval with raw vibration, FFT, and feature trends.',
     openFocusModal: 'Open Focus Analysis',
     focusRange: 'Analysis Range',
+    preAlarmRange: 'Pre-alarm range',
+    alarmActiveRange: 'Active risk range',
+    postAlarmRange: 'Recovery range',
+    peakRiskRange: 'Peak risk range',
+    peakRisk: 'Peak risk',
     selectedRange: 'Selected Range',
     selectedFft: 'Selected Range FFT',
     focusRawTitle: 'Raw Vibration Around Alarm',
+    currentFocusRawTitle: 'Current Raw Vibration Range',
     focusTrendTitle: 'Feature Flow',
     focusAiResult: 'Selected Range AI Analysis',
     loading: 'Loading',
@@ -910,17 +945,9 @@ export default {
       language: 'ko',
       navItems: [
         { key: 'dashboard', labelKey: 'dashboard', segment: 'overview' },
-        { key: 'vibration', labelKey: 'vibration', segment: 'raw' },
-        { key: 'fft', labelKey: 'fft', segment: 'fft' },
         { key: 'alarms', labelKey: 'alarms', segment: 'alarms' },
-        { key: 'focus', labelKey: 'focusAnalysis', segment: 'focus' }
-      ],
-      segments: [
-        { key: 'overview', labelKey: 'overview' },
-        { key: 'raw', labelKey: 'raw' },
-        { key: 'fft', labelKey: 'fftFeatures' },
-        { key: 'alarms', labelKey: 'alarmTab' },
-        { key: 'focus', labelKey: 'focusTab' }
+        { key: 'vibration', labelKey: 'vibration', segment: 'raw' },
+        { key: 'fft', labelKey: 'fft', segment: 'fft' }
       ],
       activeNav: 'dashboard',
       activeSegment: 'overview',
@@ -937,6 +964,7 @@ export default {
       analysisResults: [],
       equipmentLatestMap: {},
       alarms: [],
+      focusMode: 'alarm',
       focusAlarm: null,
       focusAnalysis: null,
       focusSelection: null,
@@ -961,16 +989,21 @@ export default {
     };
   },
   computed: {
-    activeTitle() {
-      const titleMap = {
-        overview: 'overviewTitle',
-        raw: 'rawTitle',
-        fft: 'fftTitle',
-        alarms: 'alarmsTitle',
-        focus: 'focusTitle'
-      };
-      return this.t(titleMap[this.activeSegment] || 'overviewTitle');
-    },
+      activeTitle() {
+        const titleMap = {
+          overview: 'overviewTitle',
+          raw: 'rawTitle',
+          fft: 'fftTitle',
+          alarms: 'alarmsTitle'
+        };
+        return this.t(titleMap[this.activeSegment] || 'overviewTitle');
+      },
+      isEquipmentScopedSegment() {
+        return ['raw', 'fft'].includes(this.activeSegment);
+      },
+      isFleetSegment() {
+        return ['overview', 'alarms'].includes(this.activeSegment);
+      },
     formattedLastUpdated() {
       if (!this.lastUpdatedAt) {
         return '-';
@@ -1011,15 +1044,15 @@ export default {
       return currentRows.sort((left, right) => this.toTime(left.measuredAt || left.createdAt) - this.toTime(right.measuredAt || right.createdAt));
     },
     metricSpecs() {
-      return {
-        rms: { label: this.t('rms'), decimals: 5, unit: '', thresholdMode: 'data' },
-        peakFrequency: { label: this.t('peakFrequency'), decimals: 2, unit: 'Hz', thresholdMode: 'data' },
-        peakToPeak: { label: this.t('peakToPeak'), decimals: 5, unit: '', thresholdMode: 'data' },
-        crestFactor: { label: this.t('crestFactor'), decimals: 3, unit: '', thresholdMode: 'fixed' },
-        kurtosis: { label: this.t('kurtosis'), decimals: 3, unit: '', thresholdMode: 'fixed' },
-        anomalyScore: { label: this.t('anomalyScore'), decimals: 4, unit: '', thresholdMode: 'fixed' }
-      };
-    },
+        return {
+          rms: { label: this.t('rms'), decimals: 5, unit: 'a.u.', thresholdMode: 'data' },
+          peakFrequency: { label: this.t('peakFrequency'), decimals: 2, unit: 'Hz', thresholdMode: 'data' },
+          peakToPeak: { label: this.t('peakToPeak'), decimals: 5, unit: 'a.u.', thresholdMode: 'data' },
+          crestFactor: { label: this.t('crestFactor'), decimals: 3, unit: 'ratio', thresholdMode: 'fixed' },
+          kurtosis: { label: this.t('kurtosis'), decimals: 3, unit: '-', thresholdMode: 'fixed' },
+          anomalyScore: { label: this.t('anomalyScore'), decimals: 4, unit: '0-1', thresholdMode: 'fixed' }
+        };
+      },
     selectedMetricSpec() {
       return this.metricSpecs[this.selectedMetricKey] || this.metricSpecs.rms;
     },
@@ -1107,10 +1140,13 @@ export default {
           min: data[0] ? data[0][0] : undefined,
           max: data.length > 0 ? data[data.length - 1][0] : undefined
         },
-        yAxis: {
-          type: 'value',
-          scale: true
-        },
+	        yAxis: {
+	          type: 'value',
+	          name: this.selectedMetricSpec.unit
+	            ? `${this.selectedMetricSpec.label} (${this.selectedMetricSpec.unit})`
+	            : this.selectedMetricSpec.label,
+	          scale: true
+	        },
         toolbox: {
           right: 10,
           feature: {
@@ -1143,7 +1179,7 @@ export default {
         series: {
           name: this.selectedMetricSpec.label,
           type: 'line',
-          smooth: true,
+          smooth: false,
           symbol: 'circle',
           symbolSize: 5,
           data,
@@ -1158,14 +1194,24 @@ export default {
         }
       };
     },
-    rawSignalOption() {
-      const data = this.buildRawSignalData();
-      return {
-        tooltip: {
-          trigger: 'axis',
-          position: (pt) => [pt[0], '10%'],
-          valueFormatter: (value) => Number(value).toFixed(5)
-        },
+      rawSignalOption() {
+        const data = this.buildRawSignalData();
+        return {
+          tooltip: {
+            trigger: 'axis',
+            position: (pt) => [pt[0], '10%'],
+            formatter: (params) => {
+              if (!params || params.length === 0) {
+                return '';
+              }
+              const point = params[0].value;
+              return [
+                `<strong>${this.t('rawSeries')}</strong>`,
+                `${this.t('timeAxis')}: ${new Date(point[0]).toLocaleString(this.language === 'ko' ? 'ko-KR' : 'en-US')}`,
+                `${this.t('vibrationAmplitude')}: ${Number(point[1]).toFixed(5)} a.u.`
+              ].join('<br/>');
+            }
+          },
         title: {
           left: 'center',
           text: this.t('rawSeriesTitle'),
@@ -1184,16 +1230,17 @@ export default {
             saveAsImage: {}
           }
         },
-        grid: { top: 72, left: 58, right: 34, bottom: 72 },
-        xAxis: {
-          type: 'value',
-          name: this.t('sampleIndex'),
-          boundaryGap: false
-        },
-        yAxis: {
-          type: 'value',
-          boundaryGap: [0, '100%']
-        },
+          grid: { top: 72, left: 58, right: 34, bottom: 72 },
+          xAxis: {
+            type: 'time',
+            name: this.t('timeAxis'),
+            boundaryGap: false
+          },
+          yAxis: {
+            type: 'value',
+            name: this.t('vibrationAmplitudeUnit'),
+            boundaryGap: [0, '100%']
+          },
         dataZoom: [
           {
             type: 'inside',
@@ -1210,14 +1257,14 @@ export default {
           {
             name: this.t('rawSeries'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'none',
             sampling: 'lttb',
             areaStyle: {
-              color: 'rgba(0, 141, 213, 0.2)'
+              color: 'rgba(0, 44, 95, 0.16)'
             },
             lineStyle: {
-              color: '#008dd5',
+              color: '#002c5f',
               width: 1.8
             },
             data
@@ -1259,15 +1306,15 @@ export default {
           boundaryGap: false,
           axisLine: { lineStyle: { color: '#b8c2cc' } }
         },
-        yAxis: [
-          { type: 'value', name: 'RMS / Score' },
-          { type: 'value', name: 'Hz' }
-        ],
+          yAxis: [
+            { type: 'value', name: `${this.t('rms')} / ${this.t('scoreAxis')}` },
+            { type: 'value', name: 'Hz' }
+          ],
         series: [
           {
             name: this.t('rms'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'circle',
             symbolSize: 5,
             data: rows.map((row) => [this.toTime(row.createdAt || row.measuredAt), row.rms]),
@@ -1280,14 +1327,14 @@ export default {
           {
             name: this.t('anomalyScore'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'none',
             data: rows.map((row) => [this.toTime(row.createdAt || row.measuredAt), row.anomalyScore])
           },
           {
             name: this.t('peakFrequency'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'none',
             yAxisIndex: 1,
             data: rows.map((row) => [this.toTime(row.createdAt || row.measuredAt), row.peakFrequency]),
@@ -1382,16 +1429,16 @@ export default {
         ]
       };
     },
-    metricCards() {
-      return [
-        this.metricCard('1', this.t('rms'), 'rms', 5),
-        this.metricCard('2', this.t('peakFrequency'), 'peakFrequency', 2, 'Hz'),
-        this.metricCard('3', this.t('peakToPeak'), 'peakToPeak', 5),
-        this.metricCard('4', this.t('crestFactor'), 'crestFactor', 3),
-        this.metricCard('5', this.t('kurtosis'), 'kurtosis', 3),
-        this.metricCard('6', this.t('anomalyScore'), 'anomalyScore', 4)
-      ];
-    },
+	    metricCards() {
+	      return [
+	        this.metricCard('1', this.t('rms'), 'rms', 5, 'a.u.'),
+	        this.metricCard('2', this.t('peakFrequency'), 'peakFrequency', 2, 'Hz'),
+	        this.metricCard('3', this.t('peakToPeak'), 'peakToPeak', 5, 'a.u.'),
+	        this.metricCard('4', this.t('crestFactor'), 'crestFactor', 3, 'ratio'),
+	        this.metricCard('5', this.t('kurtosis'), 'kurtosis', 3, '-'),
+	        this.metricCard('6', this.t('anomalyScore'), 'anomalyScore', 4, '0-1')
+	      ];
+	    },
     confidenceGaugeOption() {
       const confidence = Math.max(0, Math.min(1, Number(this.latestAnalysis.confidence || 0)));
       return {
@@ -1556,24 +1603,125 @@ export default {
       }
       return '';
     },
-    focusModalTitle() {
-      if (!this.focusAnalysis) {
-        return this.t('focusAnalysis');
-      }
-      return `${this.focusAnalysis.equipmentCode} · ${this.tLevel(this.focusAnalysis.alarmLevel)} #${this.focusAnalysis.alarmId}`;
-    },
-    focusSelectionRangeText() {
-      if (!this.focusSelectionRange) {
-        return '-';
-      }
-      return `${this.formatTimeOnly(this.focusSelectionRange.start)} - ${this.formatTimeOnly(this.focusSelectionRange.end)}`;
-    },
-    focusRawOption() {
-      const points = this.focusAnalysis?.points || [];
-      const data = points.map((point) => [point.timestamp, point.value]);
-      const occurredAt = this.toTime(this.focusAnalysis?.occurredAt);
-      const endedAt = this.toTime(this.focusAnalysis?.endedAt || this.focusAnalysis?.occurredAt);
-      return {
+      focusModalTitle() {
+        if (!this.focusAnalysis) {
+          return this.t('focusAnalysis');
+        }
+        if (this.focusMode === 'current') {
+          return `${this.focusAnalysis.equipmentCode} · ${this.t('currentFocusTitle')}`;
+        }
+        return `${this.focusAnalysis.equipmentCode} · ${this.tLevel(this.focusAnalysis.alarmLevel)} #${this.focusAnalysis.alarmId}`;
+      },
+      focusSelectionRangeText() {
+        if (!this.focusSelectionRange) {
+          return '-';
+        }
+        return `${this.formatTimeOnly(this.focusSelectionRange.start)} - ${this.formatTimeOnly(this.focusSelectionRange.end)}`;
+      },
+      focusPeakRiskPoint() {
+        const rows = this.focusAnalysis?.analysisTrend || [];
+        return rows.reduce((peak, row) => {
+          const time = this.toTime(row.measuredAt || row.createdAt);
+          const value = Number(row.anomalyScore);
+          if (!Number.isFinite(time) || !Number.isFinite(value)) {
+            return peak;
+          }
+          if (!peak || value > peak.value) {
+            return { time, value, row };
+          }
+          return peak;
+        }, null);
+      },
+      focusRiskMarkAreas() {
+        if (!this.focusAnalysis) {
+          return [];
+        }
+        const points = this.focusAnalysis.points || [];
+        const firstPoint = points[0]?.timestamp;
+        const lastPoint = points[points.length - 1]?.timestamp;
+        const rangeStart = this.firstFiniteTime(this.focusAnalysis.rangeStart, firstPoint);
+        const rangeEnd = this.firstFiniteTime(this.focusAnalysis.rangeEnd, lastPoint);
+        const occurredAt = this.firstFiniteTime(this.focusAnalysis.occurredAt);
+        const endedAt = this.firstFiniteTime(this.focusAnalysis.endedAt, this.focusAnalysis.occurredAt);
+        const areas = [];
+        const addArea = (name, start, end, color) => {
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+            return;
+          }
+          areas.push([
+            { name, xAxis: start, itemStyle: { color } },
+            { xAxis: end }
+          ]);
+        };
+
+        addArea(this.t('preAlarmRange'), rangeStart, occurredAt, 'rgba(0, 44, 95, 0.07)');
+        addArea(this.t('alarmActiveRange'), occurredAt, endedAt, 'rgba(214, 69, 69, 0.14)');
+        addArea(this.t('postAlarmRange'), endedAt, rangeEnd, 'rgba(31, 157, 85, 0.08)');
+
+        if (!Number.isFinite(occurredAt)) {
+          const rows = this.focusAnalysis.analysisTrend || [];
+          rows.forEach((row, index) => {
+            const level = row.alarmLevel || 'normal';
+            if (!['warning', 'danger'].includes(level)) {
+              return;
+            }
+            const start = this.toTime(row.measuredAt || row.createdAt);
+            const next = rows[index + 1];
+            const nextTime = next ? this.toTime(next.measuredAt || next.createdAt) : NaN;
+            const end = Number.isFinite(nextTime)
+              ? nextTime
+              : start + this.focusWindowDurationMillis();
+            addArea(
+              this.t(level === 'danger' ? 'dangerRange' : 'warningRange'),
+              start,
+              end,
+              level === 'danger' ? 'rgba(214, 69, 69, 0.16)' : 'rgba(246, 166, 9, 0.14)'
+            );
+          });
+        }
+
+        if (this.focusPeakRiskPoint && Number.isFinite(rangeStart) && Number.isFinite(rangeEnd)) {
+          const halfWidth = Math.max(1000, Math.min(3000, (rangeEnd - rangeStart) * 0.04));
+          addArea(
+            this.t('peakRiskRange'),
+            Math.max(rangeStart, this.focusPeakRiskPoint.time - halfWidth),
+            Math.min(rangeEnd, this.focusPeakRiskPoint.time + halfWidth),
+            'rgba(214, 69, 69, 0.22)'
+          );
+        }
+        return areas;
+      },
+      focusRiskMarkLines() {
+        const occurredAt = this.firstFiniteTime(this.focusAnalysis?.occurredAt);
+        const endedAt = this.firstFiniteTime(this.focusAnalysis?.endedAt, this.focusAnalysis?.occurredAt);
+        const lines = [];
+        if (Number.isFinite(occurredAt)) {
+          lines.push({ name: this.t('alarmActiveRange'), xAxis: occurredAt });
+        }
+        if (Number.isFinite(endedAt) && endedAt !== occurredAt) {
+          lines.push({ name: this.t('postAlarmRange'), xAxis: endedAt });
+        }
+        if (this.focusPeakRiskPoint) {
+          lines.push({ name: this.t('peakRisk'), xAxis: this.focusPeakRiskPoint.time });
+        }
+        return lines;
+      },
+      focusPeakRiskMarkPoint() {
+        if (!this.focusPeakRiskPoint) {
+          return [];
+        }
+        return [
+          {
+            name: this.t('peakRisk'),
+            coord: [this.focusPeakRiskPoint.time, this.focusPeakRiskPoint.value],
+            value: this.formatNumber(this.focusPeakRiskPoint.value, 4)
+          }
+        ];
+      },
+      focusRawOption() {
+        const points = this.focusAnalysis?.points || [];
+        const data = points.map((point) => [point.timestamp, point.value]);
+        return {
         tooltip: {
           trigger: 'axis',
           confine: true,
@@ -1600,14 +1748,16 @@ export default {
           }
         },
         grid: { top: 48, left: 56, right: 26, bottom: 58 },
-        xAxis: {
-          type: 'time',
-          boundaryGap: false
-        },
-        yAxis: {
-          type: 'value',
-          scale: true
-        },
+	        xAxis: {
+	          type: 'time',
+	          name: this.t('timeAxis'),
+	          boundaryGap: false
+	        },
+	        yAxis: {
+	          type: 'value',
+	          name: this.t('vibrationAmplitudeUnit'),
+	          scale: true
+	        },
         dataZoom: [
           {
             type: 'inside',
@@ -1628,21 +1778,24 @@ export default {
             symbol: 'none',
             sampling: 'lttb',
             areaStyle: {
-              color: 'rgba(0, 141, 213, 0.14)'
+              color: 'rgba(0, 44, 95, 0.12)'
             },
             lineStyle: {
-              color: '#008dd5',
+              color: '#002c5f',
               width: 1.4
             },
-            markArea: {
-              silent: true,
-              itemStyle: { color: 'rgba(214, 69, 69, 0.08)' },
-              data: Number.isFinite(occurredAt) ? [[
-                { xAxis: occurredAt, name: this.t('alarmTab') },
-                { xAxis: Number.isFinite(endedAt) ? endedAt : occurredAt }
-              ]] : []
-            },
-            data
+              markArea: {
+                silent: true,
+                data: this.focusRiskMarkAreas
+              },
+              markLine: {
+                silent: true,
+                symbol: 'none',
+                label: { color: '#445064' },
+                lineStyle: { color: '#002c5f', type: 'dashed', width: 1 },
+                data: this.focusRiskMarkLines
+              },
+              data
           }
         ]
       };
@@ -1669,15 +1822,15 @@ export default {
           }
         },
         grid: { top: 30, left: 54, right: 26, bottom: 44 },
-        xAxis: { type: 'value', name: 'Hz', min: 0 },
-        yAxis: { type: 'value', scale: true },
+	        xAxis: { type: 'value', name: this.t('frequencyAxis'), min: 0 },
+	        yAxis: { type: 'value', name: this.t('magnitudeAxis'), scale: true },
         dataZoom: [{ type: 'inside' }, { height: 20 }],
         series: [
           {
             name: this.t('selectedFft'),
             type: 'line',
             symbol: 'none',
-            smooth: true,
+            smooth: false,
             lineStyle: { color: '#6254a8', width: 1.4 },
             data
           }
@@ -1693,14 +1846,14 @@ export default {
           data: [this.t('rms'), this.t('peakToPeak'), this.t('anomalyScore')]
         },
         grid: { top: 44, left: 56, right: 28, bottom: 44 },
-        xAxis: { type: 'time', boundaryGap: false },
-        yAxis: { type: 'value', scale: true },
+	        xAxis: { type: 'time', name: this.t('timeAxis'), boundaryGap: false },
+	        yAxis: { type: 'value', name: this.t('featureAxis'), scale: true },
         dataZoom: [{ type: 'inside' }, { height: 20 }],
         series: [
           {
             name: this.t('rms'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'circle',
             symbolSize: 4,
             data: rows.map((row) => [this.toTime(row.measuredAt), row.rms])
@@ -1708,20 +1861,31 @@ export default {
           {
             name: this.t('peakToPeak'),
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'none',
             data: rows.map((row) => [this.toTime(row.measuredAt), row.peakToPeak]),
             lineStyle: { color: '#f6a609' }
           },
-          {
-            name: this.t('anomalyScore'),
-            type: 'line',
-            smooth: true,
-            symbol: 'none',
-            data: rows.map((row) => [this.toTime(row.measuredAt), row.anomalyScore]),
-            lineStyle: { color: '#d64545' }
-          }
-        ]
+            {
+              name: this.t('anomalyScore'),
+              type: 'line',
+              smooth: false,
+              symbol: 'none',
+              data: rows.map((row) => [this.toTime(row.measuredAt), row.anomalyScore]),
+              lineStyle: { color: '#d64545' },
+              markArea: {
+                silent: true,
+                data: this.focusRiskMarkAreas
+              },
+              markPoint: {
+                symbol: 'pin',
+                symbolSize: 46,
+                itemStyle: { color: '#d64545' },
+                label: { formatter: '{b}' },
+                data: this.focusPeakRiskMarkPoint
+              }
+            }
+          ]
       };
     }
   },
@@ -1919,10 +2083,13 @@ export default {
       this.activeNav = item.key;
       this.setActiveSegment(item.segment, false);
     },
-    selectEquipment(equipmentCode) {
-      this.selectedEquipment = equipmentCode;
-      this.loadDashboard();
-    },
+	    selectEquipment(equipmentCode, targetSegment = null) {
+	      this.selectedEquipment = equipmentCode;
+	      if (targetSegment) {
+	        this.setActiveSegment(targetSegment, true);
+	      }
+	      this.loadDashboard();
+	    },
     selectMetric(metricKey) {
       this.selectedMetricKey = metricKey;
       this.showMetricDetail = true;
@@ -1936,18 +2103,39 @@ export default {
         }, 50);
       });
     },
-    closeMetricDetail() {
-      this.showMetricDetail = false;
-      this.resizeChartsSoon();
-    },
-    async openFocusAnalysis(alarm) {
-      if (!alarm || !alarm.id) {
-        return;
-      }
-      this.activeNav = 'focus';
-      this.activeSegment = 'focus';
-      this.focusAlarm = alarm;
-      this.focusAnalysis = null;
+      closeMetricDetail() {
+        this.showMetricDetail = false;
+        this.resizeChartsSoon();
+      },
+      async openCurrentFocusAnalysis() {
+        const focus = this.buildCurrentFocusAnalysis();
+        if (!focus) {
+          return;
+        }
+        this.activeNav = 'fft';
+        this.activeSegment = 'fft';
+        this.focusMode = 'current';
+        this.focusAlarm = null;
+        this.focusAnalysis = focus;
+        this.focusSelection = null;
+        this.focusSelectionRange = null;
+        this.focusLoading = false;
+        this.showFocusModal = true;
+        const initialRange = this.defaultFocusSelectionRange(focus);
+        if (initialRange) {
+          await this.loadFocusSelection(initialRange.start, initialRange.end);
+        }
+        this.resizeChartsSoon();
+      },
+      async openFocusAnalysis(alarm) {
+        if (!alarm || !alarm.id) {
+          return;
+        }
+        this.activeNav = 'fft';
+        this.activeSegment = 'fft';
+        this.focusMode = 'alarm';
+        this.focusAlarm = alarm;
+        this.focusAnalysis = null;
       this.focusSelection = null;
       this.focusSelectionRange = null;
       this.focusLoading = true;
@@ -1978,9 +2166,13 @@ export default {
       if (!focusAnalysis || !focusAnalysis.points || focusAnalysis.points.length === 0) {
         return null;
       }
-      const min = focusAnalysis.points[0].timestamp;
-      const max = focusAnalysis.points[focusAnalysis.points.length - 1].timestamp;
-      const occurred = this.toTime(focusAnalysis.occurredAt);
+	      const min = focusAnalysis.points[0].timestamp;
+	      const max = focusAnalysis.points[focusAnalysis.points.length - 1].timestamp;
+	      if (this.focusMode === 'current') {
+	        const span = Math.max(1000, Math.min(3000, (max - min) * 0.25));
+	        return { start: Math.max(min, max - span), end: max };
+	      }
+	      const occurred = this.toTime(focusAnalysis.occurredAt);
       const ended = this.toTime(focusAnalysis.endedAt || focusAnalysis.occurredAt);
       const center = Number.isFinite(occurred) ? occurred : (min + max) / 2;
       const start = Math.max(min, center - 1000);
@@ -2018,22 +2210,26 @@ export default {
         this.loadFocusSelection(start, end);
       }, 450);
     },
-    async loadFocusSelection(startMillis, endMillis) {
-      if (!this.focusAnalysis?.alarmId) {
-        return;
-      }
-      this.focusSelectionRange = { start: startMillis, end: endMillis };
-      this.focusSelectionLoading = true;
-      try {
-        this.focusSelection = await fetchAlarmFocusSelection(
-          this.focusAnalysis.alarmId,
-          Math.round(startMillis),
-          Math.round(endMillis),
-          64000
-        );
-      } catch (error) {
-        console.warn('Failed to analyze focus selection', error);
-      } finally {
+      async loadFocusSelection(startMillis, endMillis) {
+        if (!this.focusAnalysis) {
+          return;
+        }
+        this.focusSelectionRange = { start: startMillis, end: endMillis };
+        this.focusSelectionLoading = true;
+        try {
+          if (this.focusMode === 'alarm' && this.focusAnalysis.alarmId) {
+            this.focusSelection = await fetchAlarmFocusSelection(
+              this.focusAnalysis.alarmId,
+              Math.round(startMillis),
+              Math.round(endMillis),
+              64000
+            );
+          } else {
+            this.focusSelection = this.buildLocalFocusSelection(startMillis, endMillis);
+          }
+        } catch (error) {
+          console.warn('Failed to analyze focus selection', error);
+        } finally {
         this.focusSelectionLoading = false;
         this.resizeChartsSoon();
       }
@@ -2164,15 +2360,216 @@ export default {
       const weight = index - lower;
       return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
     },
-    buildRawSignalData() {
-      if (this.rawSeries.points && this.rawSeries.points.length > 0) {
-        return this.rawSeries.points.map((point, index) => [index, point.value]);
-      }
+      buildRawSignalData() {
+        if (this.rawSeries.points && this.rawSeries.points.length > 0) {
+          return this.rawSeries.points.map((point) => [point.timestamp, point.value]);
+        }
 
-      const values = this.latestRaw.values || [];
-      return values.map((value, index) => [index, value]);
-    },
-    metricCard(rank, label, key, decimals, unit = '') {
+        const values = this.latestRaw.values || [];
+        const samplingRate = Number(this.latestRaw.samplingRate || 1);
+        const base = this.firstFiniteTime(this.latestRaw.measuredAt, this.latestRaw.timestamp, Date.now());
+        const intervalMillis = samplingRate > 0 ? 1000 / samplingRate : 1;
+        return values.map((value, index) => [base + index * intervalMillis, value]);
+      },
+      buildCurrentFocusAnalysis() {
+        const signalData = this.buildRawSignalData();
+        if (!signalData.length) {
+          return null;
+        }
+        const points = signalData.map(([timestamp, value]) => ({
+          timestamp,
+          value,
+          windowIndex: null
+        }));
+        if (this.rawSeries.points && this.rawSeries.points.length > 0) {
+          points.forEach((point, index) => {
+            point.windowIndex = this.rawSeries.points[index]?.windowIndex ?? null;
+          });
+        } else {
+          points.forEach((point) => {
+            point.windowIndex = this.latestRaw.windowIndex ?? null;
+          });
+        }
+        const first = points[0].timestamp;
+        const last = points[points.length - 1].timestamp;
+        return {
+          alarmId: null,
+          equipmentCode: this.selectedEquipment,
+          alarmLevel: this.latestAnalysis.alarmLevel || 'normal',
+          status: 'current',
+          occurredAt: null,
+          endedAt: null,
+          rangeStart: new Date(first).toISOString(),
+          rangeEnd: new Date(last).toISOString(),
+          samplingRate: this.rawSeries.samplingRate || this.latestRaw.samplingRate || null,
+          windowCount: this.rawSeries.windowCount || 1,
+          sampleCount: points.length,
+          originalSampleCount: this.rawSeries.originalSampleCount || points.length,
+          downsampled: Boolean(this.rawSeries.downsampled),
+          firstWindowIndex: this.rawSeries.firstWindowIndex ?? this.latestRaw.windowIndex ?? null,
+          lastWindowIndex: this.rawSeries.lastWindowIndex ?? this.latestRaw.windowIndex ?? null,
+          points,
+          analysisTrend: this.currentReplayAnalysis.map((row) => ({
+            analysisResultId: row.id,
+            vibrationWindowId: row.vibrationWindowId,
+            measuredAt: row.measuredAt || row.createdAt,
+            windowIndex: row.windowIndex,
+            rms: row.rms,
+            peakFrequency: row.peakFrequency,
+            peakToPeak: row.peakToPeak,
+            crestFactor: row.crestFactor,
+            kurtosis: row.kurtosis,
+            anomalyScore: row.anomalyScore,
+            alarmLevel: row.alarmLevel,
+            prediction: row.prediction,
+            confidence: row.confidence
+          }))
+        };
+      },
+      buildLocalFocusSelection(startMillis, endMillis) {
+        const points = (this.focusAnalysis?.points || [])
+          .filter((point) => point.timestamp >= startMillis && point.timestamp <= endMillis);
+        const selectedPoints = points.length > 0 ? points : this.focusAnalysis.points || [];
+        const values = selectedPoints.map((point) => Number(point.value)).filter(Number.isFinite);
+        const samplingRate = this.inferCurrentSamplingRate(selectedPoints);
+        const features = this.computeSignalFeatures(values, samplingRate);
+        const fft = this.buildFftSummary(values, samplingRate);
+        const rows = this.focusAnalysis?.analysisTrend || [];
+        const candidateRows = rows.filter((row) => {
+          const time = this.toTime(row.measuredAt || row.createdAt);
+          return Number.isFinite(time) && time >= startMillis && time <= endMillis;
+        });
+        const representative = candidateRows[candidateRows.length - 1] || rows[rows.length - 1] || this.latestAnalysis;
+        const maxScore = candidateRows.reduce((max, row) => {
+          const value = Number(row.anomalyScore);
+          return Number.isFinite(value) ? Math.max(max, value) : max;
+        }, Number(representative?.anomalyScore || 0));
+
+        return {
+          alarmId: null,
+          equipmentCode: this.selectedEquipment,
+          selectedStart: new Date(startMillis).toISOString(),
+          selectedEnd: new Date(endMillis).toISOString(),
+          sampleCount: values.length,
+          originalSampleCount: values.length,
+          downsampled: false,
+          samplingRate,
+          features,
+          fft,
+          anomalyScore: maxScore,
+          alarmLevel: representative?.alarmLevel || this.latestAnalysis.alarmLevel || 'normal',
+          prediction: representative?.prediction || this.latestAnalysis.prediction,
+          confidence: representative?.confidence ?? this.latestAnalysis.confidence,
+          modelVersion: representative?.modelVersion || this.latestAnalysis.modelVersion,
+          modelInputType: representative?.modelInputType || this.latestAnalysis.modelInputType,
+          modelInputSize: values.length,
+          modelExpectedInputSize: representative?.modelExpectedInputSize || this.latestAnalysis.modelExpectedInputSize,
+          modelInputStrategy: representative?.modelInputStrategy || this.latestAnalysis.modelInputStrategy,
+          modelStatus: representative?.modelStatus || this.latestAnalysis.modelStatus
+        };
+      },
+      computeSignalFeatures(values, samplingRate) {
+        if (!values.length) {
+          return {};
+        }
+        const count = values.length;
+        const mean = values.reduce((sum, value) => sum + value, 0) / count;
+        const squareMean = values.reduce((sum, value) => sum + value * value, 0) / count;
+        const rms = Math.sqrt(squareMean);
+        const max = Math.max(...values);
+        const min = Math.min(...values);
+        const peak = Math.max(Math.abs(max), Math.abs(min));
+        const peakToPeak = max - min;
+        const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / count;
+        const fourthMoment = values.reduce((sum, value) => sum + (value - mean) ** 4, 0) / count;
+        const kurtosis = variance > 0 ? fourthMoment / (variance ** 2) : 0;
+        const crestFactor = rms > 0 ? peak / rms : 0;
+        const fft = this.buildFftSummary(values, samplingRate);
+        let peakFrequency = 0;
+        let peakMagnitude = -Infinity;
+        (fft.frequencies || []).forEach((frequency, index) => {
+          if (index === 0) {
+            return;
+          }
+          const magnitude = fft.magnitudes[index] || 0;
+          if (magnitude > peakMagnitude) {
+            peakMagnitude = magnitude;
+            peakFrequency = frequency;
+          }
+        });
+        return { rms, peakFrequency, peakToPeak, crestFactor, kurtosis };
+      },
+      buildFftSummary(values, samplingRate) {
+        if (!values.length || !samplingRate) {
+          return { frequencyResolution: 0, binCount: 0, frequencies: [], magnitudes: [] };
+        }
+        const sampleValues = values.length > 2048 ? this.evenlySampleValues(values, 2048) : values;
+        const n = sampleValues.length;
+        if (n < 2) {
+          return { frequencyResolution: 0, binCount: 0, frequencies: [], magnitudes: [] };
+        }
+        const mean = sampleValues.reduce((sum, value) => sum + value, 0) / n;
+        const centered = sampleValues.map((value) => value - mean);
+        const maxBin = Math.floor(n / 2);
+        const binStep = Math.max(1, Math.ceil(maxBin / 900));
+        const frequencies = [];
+        const magnitudes = [];
+        for (let k = 0; k <= maxBin; k += binStep) {
+          let real = 0;
+          let imag = 0;
+          for (let i = 0; i < n; i += 1) {
+            const angle = (2 * Math.PI * k * i) / n;
+            real += centered[i] * Math.cos(angle);
+            imag -= centered[i] * Math.sin(angle);
+          }
+          frequencies.push((k * samplingRate) / n);
+          magnitudes.push(Math.sqrt(real * real + imag * imag) / n);
+        }
+        return {
+          frequencyResolution: samplingRate / n,
+          binCount: frequencies.length,
+          frequencies,
+          magnitudes
+        };
+      },
+      evenlySampleValues(values, maxSamples) {
+        if (values.length <= maxSamples) {
+          return values;
+        }
+        const step = (values.length - 1) / (maxSamples - 1);
+        return Array.from({ length: maxSamples }, (_, index) => values[Math.round(index * step)]);
+      },
+      inferCurrentSamplingRate(points) {
+        const configured = Number(this.focusAnalysis?.samplingRate || this.rawSeries.samplingRate || this.latestRaw.samplingRate);
+        if (configured > 0) {
+          return configured;
+        }
+        if (!points || points.length < 2) {
+          return 1;
+        }
+        const intervals = [];
+        for (let index = 1; index < Math.min(points.length, 128); index += 1) {
+          const diff = points[index].timestamp - points[index - 1].timestamp;
+          if (diff > 0) {
+            intervals.push(diff);
+          }
+        }
+        if (!intervals.length) {
+          return 1;
+        }
+        intervals.sort((left, right) => left - right);
+        const median = intervals[Math.floor(intervals.length / 2)];
+        return median > 0 ? Math.round(1000 / median) : 1;
+      },
+      focusWindowDurationMillis() {
+        const samplingRate = Number(this.focusAnalysis?.samplingRate || this.latestRaw.samplingRate);
+        const windowSize = Number(this.latestRaw.windowSize || 2048);
+        if (samplingRate > 0 && windowSize > 0) {
+          return (windowSize / samplingRate) * 1000;
+        }
+        return 1000;
+      },
+      metricCard(rank, label, key, decimals, unit = '') {
       const value = this.latestAnalysis[key];
       const series = this.ascendingAnalysis.map((row, index) => [index, row[key] || 0]);
       return {
@@ -2191,10 +2588,10 @@ export default {
         series: [
           {
             type: 'line',
-            smooth: true,
+            smooth: false,
             symbol: 'none',
-            areaStyle: { color: 'rgba(0,141,213,0.12)' },
-            lineStyle: { color: '#008dd5', width: 1.2 },
+            areaStyle: { color: 'rgba(0,44,95,0.10)' },
+            lineStyle: { color: '#002c5f', width: 1.2 },
             data
           }
         ]
@@ -2255,7 +2652,7 @@ export default {
             data: chartRows.map((row) => ({
               name: row.name,
               value: row.value,
-              itemStyle: { color: alarmColor[row.name] || row.color || '#008dd5' }
+              itemStyle: { color: alarmColor[row.name] || row.color || '#002c5f' }
             }))
           }
         ]
@@ -2268,14 +2665,14 @@ export default {
       });
       return Object.keys(counts).map((name) => ({ name, value: counts[name] }));
     },
-    buildStatusDistribution() {
-      const level = this.latestAnalysis.alarmLevel || 'normal';
-      return [
-        { name: 'normal', value: level === 'normal' ? 1 : 0 },
-        { name: 'warning', value: level === 'warning' ? 1 : 0 },
-        { name: 'danger', value: level === 'danger' ? 1 : 0 }
-      ];
-    },
+	    buildStatusDistribution() {
+	      const counts = { normal: 0, warning: 0, danger: 0 };
+	      this.equipmentHealthRows.forEach((row) => {
+	        const level = row.alarmLevel || 'normal';
+	        counts[level] = (counts[level] || 0) + 1;
+	      });
+	      return Object.keys(counts).map((name) => ({ name, value: counts[name] }));
+	    },
     formatNumber(value, decimals) {
       if (value === undefined || value === null) {
         return '-';
@@ -2340,12 +2737,21 @@ export default {
       }
       return `${alarm.equipmentCode} ${level} ${status}: duration ${duration}, AI ${prediction}, score ${score}, RMS ${rms}, P2P ${peakToPeak}, kurtosis ${kurtosis}`;
     },
-    toTime(value) {
-      if (typeof value === 'number') {
-        return value;
+      toTime(value) {
+        if (typeof value === 'number') {
+          return value;
+        }
+        return new Date(value).getTime();
+      },
+      firstFiniteTime(...values) {
+        for (const value of values) {
+          const time = this.toTime(value);
+          if (Number.isFinite(time)) {
+            return time;
+          }
+        }
+        return NaN;
       }
-      return new Date(value).getTime();
     }
-  }
-};
+  };
 </script>
