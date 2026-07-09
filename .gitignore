@@ -32,6 +32,9 @@ data/raw_windows/*
 generated/
 data.zip
 
+# bkit
+.bkit/
+
 # Logs
 *.log
 
