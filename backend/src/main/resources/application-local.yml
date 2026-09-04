@@ -25,3 +25,4 @@ phm:
     base-url: http://localhost:8001
   storage:
     raw-window-dir: ../data/raw_windows
+    retention-days: ${RAW_WINDOW_RETENTION_DAYS:7}

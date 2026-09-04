@@ -5,9 +5,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
@@ -65,6 +68,62 @@ public class RawWindowFileStorageService {
             return deletedFileCount.get();
         } catch (java.io.IOException exception) {
             throw new UncheckedIOException("Failed to clear raw vibration window files", exception);
+        }
+    }
+
+    /** 보존 기간이 지난 원본 window 파일을 지우고, 비게 된 디렉터리를 정리한다. */
+    public long deleteOlderThan(Duration retention) {
+        if (!Files.exists(rawWindowDir)) {
+            return 0L;
+        }
+
+        Instant cutoff = Instant.now().minus(retention);
+        AtomicLong deletedFileCount = new AtomicLong();
+        List<Path> expired;
+        try (Stream<Path> paths = Files.walk(rawWindowDir)) {
+            expired = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> isModifiedBefore(path, cutoff))
+                    .toList();
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to scan raw vibration window files", exception);
+        }
+
+        expired.forEach(path -> deletePath(path, deletedFileCount));
+        deleteEmptyDirectories();
+        return deletedFileCount.get();
+    }
+
+    private boolean isModifiedBefore(Path path, Instant cutoff) {
+        try {
+            return Files.getLastModifiedTime(path).toInstant().isBefore(cutoff);
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to read raw window file time: " + path, exception);
+        }
+    }
+
+    private void deleteEmptyDirectories() {
+        List<Path> directories;
+        try (Stream<Path> paths = Files.walk(rawWindowDir)) {
+            directories = paths
+                    .filter(Files::isDirectory)
+                    .filter(path -> !path.equals(rawWindowDir))
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to scan raw vibration window directories", exception);
+        }
+
+        directories.forEach(this::deleteIfEmpty);
+    }
+
+    private void deleteIfEmpty(Path directory) {
+        try (Stream<Path> children = Files.list(directory)) {
+            if (children.findAny().isEmpty()) {
+                Files.deleteIfExists(directory);
+            }
+        } catch (java.io.IOException exception) {
+            throw new UncheckedIOException("Failed to prune raw window directory: " + directory, exception);
         }
     }
 

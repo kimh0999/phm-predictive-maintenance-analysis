@@ -3,6 +3,7 @@ package com.example.phm.vibration.service;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
@@ -20,9 +21,12 @@ import com.example.phm.vibration.dto.VibrationWindowMessage;
 import com.example.phm.vibration.entity.VibrationWindow;
 import com.example.phm.vibration.repository.VibrationWindowRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class VibrationIngestionService {
+
+    private static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Seoul");
 
     private final RawWindowFileStorageService rawWindowFileStorageService;
     private final VibrationWindowRepository vibrationWindowRepository;
@@ -47,16 +51,19 @@ public class VibrationIngestionService {
         this.aiAnalysisClient = aiAnalysisClient;
     }
 
+    @Transactional
     public VibrationIngestionResult ingest(VibrationWindowMessage message, String rawPayload) {
         validate(message);
 
         LocalDateTime measuredAt = parseMeasuredAt(message.getTimestamp());
-        ensureEquipmentExists(message.getEquipmentId());
 
+        // 분석을 첫 DB 접근보다 먼저 호출한다. FastAPI가 실패하면 원본 파일도 DB 행도 남지 않고,
+        // 커넥션은 지연 획득되므로 HTTP 호출 동안 DB 커넥션을 물고 있지 않는다.
+        AnalyzeResponse analysis = aiAnalysisClient.analyze(message);
+
+        ensureEquipmentExists(message.getEquipmentId());
         String rawFilePath = rawWindowFileStorageService.save(message, rawPayload, measuredAt);
         VibrationWindow vibrationWindow = saveVibrationWindow(message, rawFilePath, measuredAt);
-
-        AnalyzeResponse analysis = aiAnalysisClient.analyze(message);
         AnalysisResult analysisResult = saveAnalysisResult(vibrationWindow, analysis);
         boolean alarmCreated = saveAlarmIfNeeded(analysisResult, analysis);
 
@@ -222,7 +229,10 @@ public class VibrationIngestionService {
         }
 
         try {
-            return OffsetDateTime.parse(timestamp, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toLocalDateTime();
+            // 읽는 쪽이 전부 Asia/Seoul로 해석하므로, 오프셋을 버리지 않고 변환해서 저장한다.
+            return OffsetDateTime.parse(timestamp, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    .atZoneSameInstant(DEFAULT_ZONE)
+                    .toLocalDateTime();
         } catch (DateTimeParseException ignored) {
             return LocalDateTime.parse(timestamp, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         }

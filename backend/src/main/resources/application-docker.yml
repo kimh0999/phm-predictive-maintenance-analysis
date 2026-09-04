@@ -25,3 +25,4 @@ phm:
     base-url: http://ai-api:8001
   storage:
     raw-window-dir: /app/data/raw_windows
+    retention-days: ${RAW_WINDOW_RETENTION_DAYS:7}

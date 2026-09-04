@@ -34,6 +34,12 @@ public class AlarmFocusAnalysisService {
 
     private static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Seoul");
 
+    /** 한 번의 요청이 읽어 들이는 구간 폭 상한. 16kHz x 32000 window 기준 약 60개 window. */
+    private static final int MAX_RANGE_SECONDS = 120;
+
+    /** 구간 폭과 별개로 메모리에 올리는 원본 샘플 수의 절대 상한. */
+    private static final int MAX_RAW_SAMPLES = 2_000_000;
+
     private final AlarmHistoryRepository alarmHistoryRepository;
     private final VibrationWindowRepository vibrationWindowRepository;
     private final AnalysisResultRepository analysisResultRepository;
@@ -97,6 +103,13 @@ public class AlarmFocusAnalysisService {
     ) {
         if (endMillis <= startMillis) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endMillis must be greater than startMillis");
+        }
+        // 선택 구간은 잘라내지 않고 거절한다. 조용히 줄이면 FFT 결과가 요청 구간과 어긋난다.
+        if (endMillis - startMillis > MAX_RANGE_SECONDS * 1000L) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Selected range must be %d seconds or shorter".formatted(MAX_RANGE_SECONDS)
+            );
         }
 
         AlarmHistory alarm = findAlarm(alarmId);
@@ -169,10 +182,14 @@ public class AlarmFocusAnalysisService {
         if (endedAt.isBefore(occurredAt)) {
             endedAt = occurredAt;
         }
-        return new TimeRange(
-                occurredAt.minusSeconds(safePaddingSeconds),
-                endedAt.plusSeconds(safePaddingSeconds)
-        );
+        LocalDateTime start = occurredAt.minusSeconds(safePaddingSeconds);
+        LocalDateTime end = endedAt.plusSeconds(safePaddingSeconds);
+        // open 상태로 오래 남은 알람은 endedAt이 계속 밀려 구간이 무한정 늘어난다. 발생 시점 기준으로 잘라낸다.
+        LocalDateTime maxEnd = start.plusSeconds(MAX_RANGE_SECONDS);
+        if (end.isAfter(maxEnd)) {
+            end = maxEnd;
+        }
+        return new TimeRange(start, end);
     }
 
     private List<VibrationWindow> findCandidateWindows(String equipmentCode, TimeRange range) {
@@ -194,6 +211,9 @@ public class AlarmFocusAnalysisService {
 
         for (VibrationWindow window : windows) {
             VibrationWindowMessage message = readRawWindowMessage(window);
+            if (message == null) {
+                continue;
+            }
             List<Double> values = message.getValues() == null ? List.of() : message.getValues();
             if (values.isEmpty() || window.getSamplingRate() == null || window.getSamplingRate() <= 0) {
                 continue;
@@ -207,15 +227,24 @@ public class AlarmFocusAnalysisService {
                     points.add(new FocusRawPoint(timestamp, values.get(index), window.getWindowIndex()));
                 }
             }
+
+            if (points.size() >= MAX_RAW_SAMPLES) {
+                break;
+            }
         }
 
         return points;
     }
 
     private VibrationWindowMessage readRawWindowMessage(VibrationWindow window) {
+        Path rawFile = Path.of(window.getRawFilePath());
+        if (!Files.exists(rawFile)) {
+            // 보존 기간이 지나 원본이 삭제된 window. 특징값은 DB에 남으므로 파형만 건너뛴다.
+            return null;
+        }
+
         try {
-            String payload = Files.readString(Path.of(window.getRawFilePath()));
-            return objectMapper.readValue(payload, VibrationWindowMessage.class);
+            return objectMapper.readValue(Files.readString(rawFile), VibrationWindowMessage.class);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to read raw vibration window file", exception);
         }
