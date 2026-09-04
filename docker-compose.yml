@@ -1,3 +1,6 @@
+# 프로젝트 폴더명이 비ASCII(한글)이면 Compose가 프로젝트 이름을 유도하지 못하므로 직접 지정한다.
+name: smart-factory
+
 services:
   mysql:
     image: mysql:8.4
