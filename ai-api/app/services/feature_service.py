@@ -42,11 +42,20 @@ def calculate_features(values: list[float], sampling_rate: int) -> tuple[Feature
     return features, fft
 
 
+# 기준선(BASE)은 정상 구간(H_H) 특징값의 99백분위, 폭(SPAN)은 결함 구간의 55백분위까지.
+# scripts/calibrate_alarm_threshold.py로 데이터셋 전체(192파일 7,680 window)를 재서 산출했다.
+# 데이터셋이 바뀌면 그 스크립트를 다시 돌려 이 값을 갱신해야 한다.
+RMS_BASE, RMS_SPAN = 0.2366, 0.0400
+PEAK_TO_PEAK_BASE, PEAK_TO_PEAK_SPAN = 2.1648, 3.6230
+CREST_FACTOR_BASE, CREST_FACTOR_SPAN = 9.2796, 1.4261
+KURTOSIS_BASE, KURTOSIS_SPAN = 5.7771, 5.6251
+
+
 def estimate_anomaly_score(features: FeatureResponse) -> float:
-    rms_score = _clamp(features.rms / 0.5)
-    peak_to_peak_score = _clamp(features.peakToPeak / 2.0)
-    crest_score = _clamp((features.crestFactor - 3.0) / 5.0)
-    kurtosis_score = _clamp((features.kurtosis - 3.0) / 7.0)
+    rms_score = _clamp((features.rms - RMS_BASE) / RMS_SPAN)
+    peak_to_peak_score = _clamp((features.peakToPeak - PEAK_TO_PEAK_BASE) / PEAK_TO_PEAK_SPAN)
+    crest_score = _clamp((features.crestFactor - CREST_FACTOR_BASE) / CREST_FACTOR_SPAN)
+    kurtosis_score = _clamp((features.kurtosis - KURTOSIS_BASE) / KURTOSIS_SPAN)
 
     score = max(rms_score, peak_to_peak_score, crest_score, kurtosis_score)
     return round(score, 4)
