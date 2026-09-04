@@ -29,12 +29,21 @@ docs/        Architecture and interface documents
 
 ## Current Phase
 
-현재는 1차 데이터 재생 준비까지 되어 있습니다.
+수집부터 대시보드까지 전 경로가 동작합니다.
 
-- MAT 내부 구조 확인
 - MAT `Data` 배열을 window 단위 JSONL로 변환
-- Node-RED import용 MQTT replay flow
-- 테스트용 20개 window JSONL 생성
+- Node-RED가 설비 3대를 2초 주기로 MQTT 발행
+- Spring Boot가 구독해 원본 저장 + FastAPI 분석 + MySQL 적재
+- FastAPI가 FFT, 통계 특징값, 베어링 고장 분류를 반환
+- Vue 대시보드가 파형, 특징값 추세, 알람을 표시
+
+베어링 고장 분류 모델은 데이터셋 전체(192파일)로 직접 학습했습니다. 학습에 쓰지 않은
+회전수(800, 1200 rpm)에서 정확도 0.999입니다. `scripts/train_bearing_model.py` 참고.
+
+알람 임계값도 같은 데이터셋의 정상 구간 분포에서 산출했습니다.
+`scripts/calibrate_alarm_threshold.py` 참고.
+
+데이터셋 출처와 배치 방법은 `data/README.md`를 확인합니다.
 
 ## Ubuntu Quick Start
 
@@ -58,15 +67,15 @@ MAT 구조 확인:
 
 ```bash
 cd ..
-python scripts/inspect_mat.py data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_16000/RotatingSpeed_1200/H_H_16_6204_1200.mat
+python scripts/inspect_mat.py data/raw_mat/SamplingRate_16000/RotatingSpeed_1200/H_H_16_30204_1200.mat
 ```
 
 MAT -> JSONL 변환:
 
 ```bash
 python scripts/convert_mat_to_jsonl.py \
-  --input data/raw_mat/BearingType_DeepGrooveBall/SamplingRate_16000/RotatingSpeed_1200/H_H_16_6204_1200.mat \
-  --output data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl \
+  --input data/raw_mat/SamplingRate_16000/RotatingSpeed_1200/H_H_16_30204_1200.mat \
+  --output data/jsonl/MOTOR_001_H_H_16_30204_1200_32000_79.jsonl \
   --equipment-id MOTOR_001 \
   --window-size 32000 \
   --stride 16000 \
@@ -78,16 +87,16 @@ python scripts/convert_mat_to_jsonl.py \
 결과 확인:
 
 ```bash
-head -n 1 data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
-wc -l data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
+head -n 1 data/jsonl/MOTOR_001_H_H_16_30204_1200_32000_79.jsonl
+wc -l data/jsonl/MOTOR_001_H_H_16_30204_1200_32000_79.jsonl
 ```
 
 프론트 실시간 확인용 긴 설비별 샘플:
 
 ```text
-data/jsonl/MOTOR_001_H_H_16_6204_1200_32000_79.jsonl
-data/jsonl/MOTOR_002_H_IR_16_6204_1200_32000_79.jsonl
-data/jsonl/MOTOR_003_U1_H_16_6204_1200_32000_79.jsonl
+data/jsonl/MOTOR_001_H_H_16_30204_1200_32000_79.jsonl
+data/jsonl/MOTOR_002_H_IR_16_30204_1200_32000_79.jsonl
+data/jsonl/MOTOR_003_U1_H_16_30204_1200_32000_79.jsonl
 ```
 
 Node-RED flow는 위 3개 파일을 병렬로 읽습니다. 각 브랜치가 1 msg / 2 sec로 발행하므로 각 설비는 약 2초마다 갱신됩니다.

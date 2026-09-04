@@ -66,11 +66,20 @@ FastAPI는 이 raw `values`에서 다음을 동시에 계산합니다.
 
 중요:
 
-현재 제공된 모델은 설명상 subset 3, 30204 tapered roller bearing, 16 kHz 기준입니다.
-현재 MVP 데이터 폴더는 6204 deep groove ball bearing 중심입니다.
-따라서 모델 구조는 맞지만 데이터 도메인은 완전히 같지 않을 수 있습니다.
+현재 모델과 재생 데이터는 모두 subset 3, 30204 tapered roller bearing, 16 kHz 기준입니다.
+데이터 도메인은 일치합니다.
 
-그 때문에 현재 운영 판정은 기존 signal feature 기반 `anomalyScore`와 `alarmLevel`을 유지하고, AI 모델 결과는 FFT 탭에서 참고 예측으로 표시합니다.
+초기에 함께 제공되던 모델은 MAT 파일 안의 `Spectrogram` 필드(dB 스케일)로 학습된 반면
+운영 FastAPI는 raw 신호에서 선형 스펙트로그램을 만들어 넣고 있었습니다.
+값의 범위가 서로 1000배 이상 어긋나 모든 입력이 같은 클래스로 분류되었습니다.
+
+`scripts/train_bearing_model.py`는 이 문제를 구조적으로 막습니다. 학습 코드가
+`app.services.predict_service._signal_to_spectrogram_vector`를 그대로 import해서
+쓰기 때문에 학습과 추론이 같은 전처리를 공유합니다. MAT의 `Spectrogram` 필드는
+사용하지 않습니다.
+
+현재 운영 판정은 signal feature 기반 `anomalyScore`와 `alarmLevel`이 담당하고,
+AI 모델 결과는 고장 유형 추정으로 함께 표시합니다.
 
 ## 추천 학습 스펙
 
@@ -105,18 +114,24 @@ X.shape = (n_windows, 4096)
 
 ```text
 y.shape = (n_windows,)
-y class = normal | bearing | looseness | misalignment | unbalance
+y class = normal | ball | inner_race | outer_race
 ```
 
-현재 `bearing`은 볼 결함, 내륜 결함, 외륜 결함을 하나로 합친 통합 라벨입니다. 따라서 이 모델은 `bearing`이라고 말할 수는 있지만, 그 안에서 `ball`, `inner_race`, `outer_race` 중 무엇인지는 구분할 수 없습니다.
-
-세부 베어링 결함까지 화면에 표시하려면 다음 학습부터는 아래처럼 세부 라벨 모델로 학습하는 것을 권장합니다.
+현재 모델은 베어링 상태를 세부 라벨로 구분합니다. 파일명의 베어링 상태 토큰
+(`H` / `B` / `IR` / `OR`)을 그대로 라벨로 씁니다.
 
 ```text
-y class = normal | ball | inner_race | outer_race | looseness | misalignment | unbalance
+H  -> normal
+B  -> ball
+IR -> inner_race
+OR -> outer_race
 ```
 
-서비스 프론트엔드는 이미 `ball`, `B`, `inner_race`, `IR`, `outer_race`, `OR` 라벨을 한글 표시명으로 변환할 수 있습니다. 즉 모델만 세부 라벨을 출력하면 기존 API/DB의 `prediction` 문자열을 통해 바로 표시할 수 있습니다.
+서비스 프론트엔드는 이 라벨들을 한글 표시명으로 변환할 수 있습니다.
+
+회전체 상태(정상 / 풀림 / 미스얼라인먼트 / 불평형)를 분류하려면 같은 스크립트를
+`--target rotating`으로 실행해 별도 모델을 만듭니다. 두 축은 독립이므로 한 모델에
+합치지 않습니다.
 
 모델의 1차 출력은 분류 결과입니다.
 
